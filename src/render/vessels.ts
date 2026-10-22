@@ -130,7 +130,7 @@ function stretch(c: Chain, d0: number, d1: number): { xs: number[]; ys: number[]
 }
 
 /** A pulse is a bright head PULSE_LENGTH long drawn in SEGMENTS steps, then a dim wake WAKE long. */
-const SEGMENTS = 6;
+const SEGMENTS = 9;
 const WAKE = 280;
 const WAKE_SEGMENTS = 3;
 
@@ -142,23 +142,30 @@ export function drawPulses(ctx: CanvasRenderingContext2D, world: World, clock: C
   const { heart, vessels, palette } = world;
   const haloReach = pixels(view, 2.6, 3.2);
   const glow = rgba(palette.glow, 1);
+  // Half-widths for vessel width w at position u along the head (0 at the front, 1 at its end): the
+  // outer glows narrow toward the tail, so that each pulse is a comet.
   const layers = [
-    { half: (w: number) => w * 1.1 + 4 * haloReach, alpha: 0.07, color: glow, glow: new Glow(step) },
-    { half: (w: number) => w * 0.68 + haloReach, alpha: 0.2, color: glow, glow: new Glow(step) },
+    { half: (w: number, u: number) => (w * 1.1 + 4 * haloReach) * Math.max(0, 1 - 2 * u) ** 0.7, alpha: 0.07, color: glow, glow: new Glow(step) },
+    { half: (w: number, u: number) => (w * 0.68 + haloReach) * (1 - 0.8 * u), alpha: 0.2, color: glow, glow: new Glow(step) },
     { half: (w: number) => w * 0.32 + 0.5, alpha: 0.55, color: glow, glow: new Glow(step) },
     { half: (w: number) => w * 0.13 + 0.25, alpha: 0.85, color: rgba(palette.spark, 1), glow: new Glow(step) },
   ];
   const wake = { half: (w: number) => w * 0.3 + 0.4, alpha: 0.3, color: glow, glow: new Glow(step) };
-  // Stretches behind the front: the head's six in every layer but the bloom, which only the first
-  // three get, then the wake.
-  const stretches: { from: number; to: number; level: number; layers: typeof layers }[] = [];
+  // Stretches behind the front: the head's in every layer (the bloom only near the front), then the wake.
+  const stretches: { from: number; to: number; level: number; u: number; layers: (typeof layers)[number][] }[] = [];
   for (let k = 0; k < SEGMENTS; k++) {
-    const level = (1 - (k + 0.5) / SEGMENTS) ** 1.6;
-    stretches.push({ from: (k / SEGMENTS) * PULSE_LENGTH, to: ((k + 1) / SEGMENTS) * PULSE_LENGTH, level, layers: k < 3 ? layers : layers.slice(1) });
+    const u = (k + 0.5) / SEGMENTS;
+    stretches.push({
+      from: (k / SEGMENTS) * PULSE_LENGTH,
+      to: ((k + 1) / SEGMENTS) * PULSE_LENGTH,
+      level: (1 - u) ** 1.6,
+      u,
+      layers: u < 0.5 ? layers : layers.slice(1),
+    });
   }
   for (let k = 0; k < WAKE_SEGMENTS; k++) {
     const level = 0.55 * (1 - (k + 0.5) / WAKE_SEGMENTS);
-    stretches.push({ from: PULSE_LENGTH + (k / WAKE_SEGMENTS) * WAKE, to: PULSE_LENGTH + ((k + 1) / WAKE_SEGMENTS) * WAKE, level, layers: [wake] });
+    stretches.push({ from: PULSE_LENGTH + (k / WAKE_SEGMENTS) * WAKE, to: PULSE_LENGTH + ((k + 1) / WAKE_SEGMENTS) * WAKE, level, u: 1, layers: [wake] });
   }
   // The bloom reaches farthest beyond a chain's box.
   const reach = 4 * haloReach + 0.7 * vessels.maxWidth;
@@ -176,9 +183,12 @@ export function drawPulses(ctx: CanvasRenderingContext2D, world: World, clock: C
         const piece = stretch(c, Math.max(first, front - st.to), Math.min(last, front - st.from));
         if (!piece) continue;
         const { nx, ny } = normals(piece.xs, piece.ys);
+        const head = piece.xs.length - 1;
         for (const layer of st.layers) {
-          const half = piece.ws.map(layer.half);
+          const half = piece.ws.map((w) => layer.half(w, st.u));
           band(layer.glow.at(level), piece.xs, piece.ys, nx, ny, half.map((h) => -h), half);
+          // The front of the head is round.
+          if (st.from === 0 && front < last) circle(layer.glow.at(level), piece.xs[head]!, piece.ys[head]!, layer.half(piece.ws[head]!, 0));
         }
       }
     }

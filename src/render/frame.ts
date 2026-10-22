@@ -1,32 +1,34 @@
 // One frame, back to front: ground, the heart's light, the cells' glow, deep gears, working gears,
-// vessels, couplings, organs, pulses, tips, heart. Everything is drawn in world units under one viewport transform,
-// and the canvas state is saved and restored around the frame.
+// vessels, couplings, organs, pulses, tips, heart. Everything is drawn in world units under one
+// viewport transform, and the canvas state is saved and restored around the frame.
 //
-// What never moves is kept between frames: the ground and the vessels as bitmap layers of the canvas's
-// size (copied in at whole pixels, so they are exactly what drawing them would give), the heart's
-// casting and the gears' shapes and sprites per scale.
+// What never moves is kept between frames: the ground and the vessels as bitmap layers of the
+// canvas's size (copied in at whole pixels, so they are exactly what drawing them would give), or as
+// paths on a canvas too large for extra layers; the heart's casting and the gears' shapes and sprites
+// per scale.
 
 import type { Clock } from "../engine/rhythm.js";
 import type { Viewport } from "../engine/validate.js";
 import type { World } from "../world/world.js";
 import { drawCouplings, drawGears, newGearCache, type GearCache, type MakeCanvas } from "./gears.js";
-import { buildGroundArt, drawCellGlow, drawGround, drawHeartLight, drawVeil } from "./ground.js";
+import { buildGroundArt, drawCellGlow, drawGround, drawHeartLight, drawVeil, type GroundArt } from "./ground.js";
 import { buildHeartArt, drawHeart, type HeartArt } from "./heart.js";
 import { drawOrgans } from "./organs.js";
 import { MAX_EDGE_PX } from "./shapes.js";
-import { buildVesselArt, drawPulses, drawTips, drawVessels } from "./vessels.js";
+import { buildVesselArt, drawPulses, drawTips, drawVessels, type VesselArt } from "./vessels.js";
 import { viewOf, type View } from "./view.js";
 
-/** The still layers for one viewport on one canvas size. */
-interface Layers {
-  key: string;
-  ground: HTMLCanvasElement;
-  vessels: HTMLCanvasElement;
-}
+/** Canvases larger than this many pixels keep their still parts as paths rather than bitmap layers. */
+const MAX_LAYER_PIXELS = 4_500_000;
+
+/** The still parts for one viewport on one canvas size: bitmap layers, or the paths to draw. */
+type Still =
+  | { key: string; kind: "layers"; ground: HTMLCanvasElement; vessels: HTMLCanvasElement }
+  | { key: string; kind: "paths"; ground: GroundArt; vessels: VesselArt };
 
 /** What a world keeps between frames. */
 interface Cache {
-  layers: Layers[];
+  stills: Still[];
   gears: Map<number, GearCache>;
   hearts: Map<number, HeartArt>;
 }
@@ -37,7 +39,7 @@ const KEEP = 3;
 
 function cacheFor(world: World): Cache {
   let cache = caches.get(world);
-  if (!cache) caches.set(world, (cache = { layers: [], gears: new Map(), hearts: new Map() }));
+  if (!cache) caches.set(world, (cache = { stills: [], gears: new Map(), hearts: new Map() }));
   return cache;
 }
 
@@ -75,37 +77,53 @@ interface Frame {
   make: MakeCanvas;
 }
 
-/** The ground (opaque) and the vessels (on transparency), rendered once for this viewport and size. */
-function layersFor(f: Frame, cache: Cache): Layers {
+const toWorld = (ctx: CanvasRenderingContext2D, f: Frame) => ctx.setTransform(f.sx, 0, 0, f.sy, -f.viewport.x * f.sx, -f.viewport.y * f.sy);
+
+/** The opaque ground, under its veil. */
+function paintGround(ctx: CanvasRenderingContext2D, f: Frame, art: GroundArt): void {
+  ctx.save();
+  ctx.setTransform(1, 0, 0, 1, 0, 0);
+  ctx.fillStyle = f.world.palette.ground[2];
+  ctx.fillRect(0, 0, f.width, f.height);
+  ctx.restore();
+  drawGround(ctx, f.world, art, f.view);
+  drawVeil(ctx, f.world, f.view);
+}
+
+function stillFor(f: Frame, cache: Cache): Still {
   const key = `${f.width}x${f.height}|${f.viewport.x},${f.viewport.y},${f.viewport.width},${f.viewport.height}`;
-  let layers = cache.layers.find((l) => l.key === key);
-  if (layers) return layers;
-  const layer = (paint: (ctx: CanvasRenderingContext2D) => void) => {
-    const canvas = f.make(f.width, f.height);
-    const ctx = canvas.getContext("2d", { willReadFrequently: true })!;
-    begin(ctx, f.sx, f.sy, -f.viewport.x * f.sx, -f.viewport.y * f.sy);
-    paint(ctx);
-    return canvas;
-  };
-  layers = {
-    key,
-    ground: layer((ctx) => {
-      ctx.save();
-      ctx.setTransform(1, 0, 0, 1, 0, 0);
-      ctx.fillStyle = f.world.palette.ground[2];
-      ctx.fillRect(0, 0, f.width, f.height);
-      ctx.restore();
-      drawGround(ctx, f.world, buildGroundArt(f.world, f.view, f.step), f.view);
-      drawVeil(ctx, f.world, f.view);
-    }),
-    vessels: layer((ctx) => {
-      drawVessels(ctx, f.world, buildVesselArt(f.world, f.view, f.step), f.view);
+  let still = cache.stills.find((s) => s.key === key);
+  if (still) return still;
+  const ground = buildGroundArt(f.world, f.view, f.step), vessels = buildVesselArt(f.world, f.view, f.step);
+  still = { key, kind: "paths", ground, vessels };
+  if (f.width * f.height <= MAX_LAYER_PIXELS) {
+    const layer = (paint: (ctx: CanvasRenderingContext2D) => void) => {
+      const ctx = f.make(f.width, f.height).getContext("2d", { willReadFrequently: true });
+      if (!ctx) return null;
+      begin(ctx, 1, 1, 0, 0);
+      toWorld(ctx, f);
+      paint(ctx);
+      return ctx.canvas;
+    };
+    const groundLayer = layer((ctx) => paintGround(ctx, f, ground));
+    const vesselLayer = layer((ctx) => {
+      drawVessels(ctx, f.world, vessels, f.view);
+      // On a layer of its own, the veil darkens only the vessels.
       drawVeil(ctx, f.world, f.view, "source-atop");
-    }),
-  };
-  cache.layers.unshift(layers);
-  cache.layers.length = Math.min(cache.layers.length, KEEP);
-  return layers;
+    });
+    if (groundLayer && vesselLayer) still = { key, kind: "layers", ground: groundLayer, vessels: vesselLayer };
+  }
+  cache.stills.unshift(still);
+  cache.stills.length = Math.min(cache.stills.length, KEEP);
+  return still;
+}
+
+/** Copies a bitmap layer onto the canvas at whole pixels. */
+function copy(ctx: CanvasRenderingContext2D, layer: HTMLCanvasElement): void {
+  ctx.save();
+  ctx.setTransform(1, 0, 0, 1, 0, 0);
+  ctx.drawImage(layer, 0, 0);
+  ctx.restore();
 }
 
 export function drawFrame(
@@ -123,23 +141,22 @@ export function drawFrame(
   const step = MAX_EDGE_PX / scale;
   const f: Frame = { world, viewport, width, height, sx, sy, view: viewOf(viewport, width, height), step, make };
   const cache = cacheFor(world);
-  const layers = layersFor(f, cache);
+  const still = stillFor(f, cache);
   const gears = perScale(cache.gears, step, newGearCache);
   const heart = perScale(cache.hearts, step, () => buildHeartArt(world, step));
   const { view } = f;
 
   ctx.save();
   begin(ctx, 1, 1, 0, 0);
-  ctx.drawImage(layers.ground, 0, 0);
-  ctx.setTransform(sx, 0, 0, sy, -viewport.x * sx, -viewport.y * sy);
+  toWorld(ctx, f);
+  if (still.kind === "layers") copy(ctx, still.ground);
+  else paintGround(ctx, f, still.ground);
   drawHeartLight(ctx, world, clock, view);
   drawCellGlow(ctx, world, clock, view, step);
   drawGears(ctx, world, gears, clock, view, step, scale, make, "deep");
   drawGears(ctx, world, gears, clock, view, step, scale, make, "working");
-  ctx.save();
-  ctx.setTransform(1, 0, 0, 1, 0, 0);
-  ctx.drawImage(layers.vessels, 0, 0);
-  ctx.restore();
+  if (still.kind === "layers") copy(ctx, still.vessels);
+  else drawVessels(ctx, world, still.vessels, view);
   drawCouplings(ctx, world, clock, view, step);
   drawOrgans(ctx, world, clock, view, step);
   drawPulses(ctx, world, clock, view, step);
