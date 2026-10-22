@@ -44,8 +44,10 @@ function say(message: string, error = false): void {
 function draw(): void {
   renderFrame(ui.canvas, { seed: state.seed, timeMs: state.timeMs, viewport: WHOLE });
   const ms = Math.round(state.timeMs);
+  const text = `${ms} ms · beat ${Math.floor(state.timeMs / BEAT_MS) + 1} of ${CYCLE_MS / BEAT_MS}`;
   ui.time.value = String(ms);
-  ui.readout.textContent = `${ms} ms · beat ${Math.floor(state.timeMs / BEAT_MS) + 1} of ${CYCLE_MS / BEAT_MS}`;
+  ui.time.setAttribute("aria-valuetext", text);
+  ui.readout.textContent = text;
 }
 
 /** Sizes the canvas backing store to its displayed size; true if it changed. */
