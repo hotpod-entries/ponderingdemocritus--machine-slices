@@ -1,10 +1,11 @@
 // Vessels, pulses and tips. The vessels never move, so their passes (edge, wall, channel, highlight,
-// collars, tip bulbs) are built once per view and scale as unions. Pulses are light: each beat every
-// cylinder sends one down its tree, and wherever the network is at the pulse's distance from the
-// heart, that stretch glows; when the pulse reaches a tip, the tip flashes.
+// collars, tip bulbs) are built once per view and scale as unions. Pulses are light: each of the
+// heart's two strokes sends one down every vessel at once, and wherever the network is at a pulse's
+// distance from the heart, that stretch glows, so each beat spreads outward as a pair of rings; when
+// a pulse reaches a tip, the tip flashes.
 
 import { lerp } from "../engine/geometry.js";
-import { BEAT_MS, pulseAges, wrap, type Clock } from "../engine/rhythm.js";
+import { BEAT_MS, pulseAges, STROKES, wrap, type Clock } from "../engine/rhythm.js";
 import { rgba } from "../world/palette.js";
 import type { Chain } from "../world/vessels.js";
 import { PULSE_LENGTH, PULSE_SPEED, type World } from "../world/world.js";
@@ -147,7 +148,7 @@ const WAKE_SEGMENTS = 3;
  * head, a wake of fading light shows which way the pulse is going.
  */
 export function drawPulses(ctx: CanvasRenderingContext2D, world: World, clock: Clock, view: View, step: number): void {
-  const { heart, vessels, palette } = world;
+  const { vessels, palette } = world;
   const haloReach = pixels(view, 2.6, 3.2);
   const glow = rgba(palette.glow, 1);
   // Half-widths for vessel width w at position u along the head (0 at the front, 1 at its end): the
@@ -181,10 +182,10 @@ export function drawPulses(ctx: CanvasRenderingContext2D, world: World, clock: C
     if (!sees(view, c.box, reach)) continue;
     const first = c.ds[0]!, last = c.ds[c.ds.length - 1]!;
     const maxAge = (vessels.reach[c.tree]! + PULSE_LENGTH + WAKE) / PULSE_SPEED;
-    for (const age of pulseAges(clock, heart.firePhase[c.tree]!, maxAge)) {
+    for (const stroke of STROKES) for (const age of pulseAges(clock, stroke.phase, maxAge)) {
       const front = age * PULSE_SPEED;
       if (first > front || last < front - PULSE_LENGTH - WAKE) continue;
-      const fade = 0.35 + 0.65 * Math.exp(-front / 1250);
+      const fade = stroke.strength * (0.35 + 0.65 * Math.exp(-front / 1250));
       for (const st of stretches) {
         const level = Math.round(LEVELS * fade * st.level);
         if (level <= 0) continue;
@@ -207,11 +208,12 @@ export function drawPulses(ctx: CanvasRenderingContext2D, world: World, clock: C
 
 /** Each tip flashes as its pulse arrives, then fades before the next beat. */
 export function drawTips(ctx: CanvasRenderingContext2D, world: World, clock: Clock, view: View, step: number): void {
-  const { heart, vessels, palette } = world;
+  const { vessels, palette } = world;
   const halo = new Glow(step), core = new Glow(step);
   for (const t of vessels.tips) {
-    const arrival = heart.firePhase[t.tree]! + t.distance / PULSE_SPEED / BEAT_MS;
-    const flash = Math.exp(-(wrap(clock.beats - arrival, 1) * BEAT_MS) / 260);
+    const travel = t.distance / PULSE_SPEED / BEAT_MS;
+    let flash = 0;
+    for (const stroke of STROKES) flash = Math.max(flash, stroke.strength * Math.exp(-(wrap(clock.beats - stroke.phase - travel, 1) * BEAT_MS) / 260));
     const level = Math.round(LEVELS * flash);
     if (level <= 0) continue;
     const [x, y, r] = bulbAt(t);

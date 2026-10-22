@@ -9,7 +9,7 @@
 
 import { TAU } from "../engine/geometry.js";
 import type { Rng } from "../engine/random.js";
-import { BEAT_MS, BEATS_PER_CYCLE } from "../engine/rhythm.js";
+import { BEAT_MS, BEATS_PER_CYCLE, LUB_PHASE } from "../engine/rhythm.js";
 import type { Heart } from "./heart.js";
 import type { Organ } from "./organs.js";
 import type { Junction, VesselField, Vessels } from "./vessels.js";
@@ -188,7 +188,7 @@ export function designGears(rng: Rng, heart: Heart, organs: readonly Organ[], ve
   const firstWorking = trains.length;
   const junctions = rng.shuffle(vessels.junctions.filter((j) => j.width > 4.2 && j.width < 16));
   for (const j of junctions) {
-    if (trains.length - firstWorking >= 46) break;
+    if (trains.length - firstWorking >= 40) break;
     const module = rng.range(2.3, 3.6);
     const teeth = nearestTeeth(WORKING_TEETH, (2 * Math.min(30, Math.max(9, j.width * 0.9 + rng.range(5, 12)))) / module);
     const outer = (teeth * module) / 2 + module;
@@ -197,13 +197,13 @@ export function designGears(rng: Rng, heart: Heart, organs: readonly Organ[], ve
     const driver = makeGear(rng, WORKING_TEETH, j.x, j.y, teeth, module, index);
     driver.phase = rng.range(0, TAU);
     driver.turn = rng.chance(0.5) ? 1 : -1;
-    const arrival = heart.firePhase[j.tree]! + j.distance / pulseSpeed / BEAT_MS;
+    const arrival = LUB_PHASE + j.distance / pulseSpeed / BEAT_MS;
     const train: Train = {
       layer: "working",
       perBeat: rng.chance(0.72) ? 1 : 2,
       clicks: rng.chance(0.78),
       delay: arrival,
-      tone: rng.weighted([0.56, 0.24, 0.2]),
+      tone: rng.weighted([0.42, 0.33, 0.25]),
       junction: j,
       gears: [working.gears.length],
     };

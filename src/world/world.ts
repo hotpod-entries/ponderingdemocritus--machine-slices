@@ -34,7 +34,7 @@ export function buildWorld(seedHex: string): World {
   const heart = designHeart(stream(words, "heart"), centre, centre);
   const organs = placeOrgans(stream(words, "organs"), heart);
   const vessels = growVessels(stream(words, "vessels"), heart, organs);
-  connectOrgans(organs, vessels, heart, PULSE_SPEED);
+  connectOrgans(organs, vessels, PULSE_SPEED);
   const works = designGears(stream(words, "gears"), heart, organs, vessels, new VesselField(vessels, 6), PULSE_SPEED);
   return { seedHex, palette, tissue, heart, organs, vessels, works };
 }

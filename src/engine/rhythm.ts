@@ -20,6 +20,17 @@ const DRIFT = 0.16;
 const LUB = { share: 0.6, start: 0, length: 0.16 };
 const DUB = { start: 0.21, length: 0.15 };
 
+/**
+ * The heart's two strokes: the beat phase at which each pushes hardest, and how hard. Each sends a
+ * pulse down every vessel at once, so pulses leave the heart in pairs, lub then dub.
+ */
+export const STROKES: readonly { phase: number; strength: number }[] = [
+  { phase: LUB.start + LUB.length / 2, strength: 1 },
+  { phase: DUB.start + DUB.length / 2, strength: 0.6 },
+];
+/** When the first, strong stroke leaves the heart: what gears, tips and organs answer to. */
+export const LUB_PHASE = STROKES[0]!.phase;
+
 export function clamp01(x: number): number {
   return x < 0 ? 0 : x > 1 ? 1 : x;
 }
@@ -119,10 +130,10 @@ export function teethAdvanced(clock: Clock, perBeat: number, clicks: boolean, de
 
 /**
  * Ages in milliseconds of the pulses still travelling, for a source that fires once per beat at beat
- * phase `firePhase`: the newest first, while younger than `maxAgeMs`.
+ * phase `phase`: the newest first, while younger than `maxAgeMs`.
  */
-export function pulseAges(clock: Clock, firePhase: number, maxAgeMs: number): number[] {
+export function pulseAges(clock: Clock, phase: number, maxAgeMs: number): number[] {
   const ages: number[] = [];
-  for (let age = wrap(clock.beats - firePhase, 1) * BEAT_MS; age <= maxAgeMs; age += BEAT_MS) ages.push(age);
+  for (let age = wrap(clock.beats - phase, 1) * BEAT_MS; age <= maxAgeMs; age += BEAT_MS) ages.push(age);
   return ages;
 }

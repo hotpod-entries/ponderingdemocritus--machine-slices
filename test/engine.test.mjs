@@ -2,7 +2,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { checkCanvasSize, checkFrameOptions, checkTime, checkViewport, parseSeed } from "../dist/engine/validate.js";
-import { BEAT_MS, BEATS_PER_CYCLE, CYCLE_MS, clockAt, heartStroke, heartStrokeInverse, pulseAges, teethAdvanced } from "../dist/engine/rhythm.js";
+import { BEAT_MS, BEATS_PER_CYCLE, CYCLE_MS, clockAt, contraction, heartStroke, heartStrokeInverse, pulseAges, STROKES, teethAdvanced } from "../dist/engine/rhythm.js";
 import { seedWords, stream } from "../dist/engine/random.js";
 
 const SEED = "0x" + "11".repeat(32);
@@ -71,6 +71,13 @@ test("gear trains advance a whole number of teeth per beat, smoothly or by click
   // A click is quick: most of a beat is rest.
   const a = teethAdvanced(clockAt(0.5 * BEAT_MS), 1, true, 0), b = teethAdvanced(clockAt(0.9 * BEAT_MS), 1, true, 0);
   assert.equal(a, b);
+});
+
+test("pulses leave on the heart's two strokes, lub stronger than dub, as the heart contracts", () => {
+  assert.equal(STROKES.length, 2);
+  assert.ok(STROKES[0].phase < STROKES[1].phase && STROKES[1].phase < 1);
+  assert.ok(STROKES[0].strength > STROKES[1].strength);
+  for (const s of STROKES) assert.ok(contraction(s.phase) > 0.6, `contracting at ${s.phase}`);
 });
 
 test("a source fires one pulse per beat", () => {

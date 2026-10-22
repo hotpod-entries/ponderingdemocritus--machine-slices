@@ -78,7 +78,7 @@ export function heartLit(ctx: CanvasRenderingContext2D, world: World, near: stri
   const { cx, cy, radius } = world.heart;
   const light = ctx.createRadialGradient(cx, cy, radius * LIT_FROM, cx, cy, LIT_TO);
   light.addColorStop(0, near);
-  light.addColorStop(0.38, mid);
+  light.addColorStop(0.3, mid);
   light.addColorStop(1, far);
   return light;
 }
@@ -87,7 +87,7 @@ export function heartLit(ctx: CanvasRenderingContext2D, world: World, near: stri
 export function heartLitAt(world: World, x: number, y: number, near: string, mid: string, far: string): string {
   const { cx, cy, radius } = world.heart;
   const t = clamp01((Math.hypot(x - cx, y - cy) - radius * LIT_FROM) / (LIT_TO - radius * LIT_FROM));
-  return t < 0.38 ? mix(near, mid, t / 0.38) : mix(mid, far, (t - 0.38) / 0.62);
+  return t < 0.3 ? mix(near, mid, t / 0.3) : mix(mid, far, (t - 0.3) / 0.7);
 }
 
 function fillView(ctx: CanvasRenderingContext2D, view: View): void {

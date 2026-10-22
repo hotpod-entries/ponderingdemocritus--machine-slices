@@ -4,7 +4,7 @@
 
 import { TAU } from "../engine/geometry.js";
 import type { Rng } from "../engine/random.js";
-import { BEAT_MS } from "../engine/rhythm.js";
+import { BEAT_MS, LUB_PHASE } from "../engine/rhythm.js";
 import type { Heart } from "./heart.js";
 import type { Vessels } from "./vessels.js";
 
@@ -49,7 +49,7 @@ export function placeOrgans(rng: Rng, heart: Heart): Organ[] {
 }
 
 /** Finds the vessel tip that feeds each organ, and when the pulse reaches it. */
-export function connectOrgans(organs: Organ[], vessels: Vessels, heart: Heart, pulseSpeed: number): void {
+export function connectOrgans(organs: Organ[], vessels: Vessels, pulseSpeed: number): void {
   for (const o of organs) {
     let best = null, bestGap = 60;
     for (const t of vessels.tips) {
@@ -61,7 +61,7 @@ export function connectOrgans(organs: Organ[], vessels: Vessels, heart: Heart, p
     }
     if (!best) continue;
     o.inlet = { x: best.x, y: best.y, width: best.width };
-    o.delay = heart.firePhase[best.tree]! + best.distance / pulseSpeed / BEAT_MS;
+    o.delay = LUB_PHASE + best.distance / pulseSpeed / BEAT_MS;
   }
 }
 
