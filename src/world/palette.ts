@@ -132,6 +132,9 @@ export function choosePalette(rng: Rng): Palette {
 
 export const rgba = (c: Rgb, alpha: number): string => `rgba(${c[0]}, ${c[1]}, ${c[2]}, ${alpha})`;
 
+/** An RGB triple as `#rrggbb`. */
+export const hex = (c: Rgb): string => "#" + c.map((v) => v.toString(16).padStart(2, "0")).join("");
+
 /** The colour a fraction t of the way from `#rrggbb` a to b, as `#rrggbb`. */
 export function mix(a: string, b: string, t: number): string {
   const channel = (hex: string, i: number) => parseInt(hex.slice(1 + 2 * i, 3 + 2 * i), 16);

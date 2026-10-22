@@ -4,10 +4,10 @@
 
 import { TAU } from "../engine/geometry.js";
 import { clamp01, type Clock } from "../engine/rhythm.js";
-import { mix, rgba } from "../world/palette.js";
+import { hex, mix, rgba } from "../world/palette.js";
 import type { World } from "../world/world.js";
-import { circle, Glow, hole, LEVELS, Pen } from "./shapes.js";
-import { sees, seesDisc, type View } from "./view.js";
+import { circle, fillShifted, Glow, hole, LEVELS, Pen } from "./shapes.js";
+import { pixels, sees, seesDisc, type View } from "./view.js";
 
 /** Distance between the dots of a construction line, and their radius. */
 const DOT_STEP = 15;
@@ -94,20 +94,38 @@ function fillView(ctx: CanvasRenderingContext2D, view: View): void {
   ctx.fillRect(view.x0 - 4, view.y0 - 4, view.x1 - view.x0 + 8, view.y1 - view.y0 + 8);
 }
 
-/** The still ground: gradient, the body's cells, and construction dots. */
+/** The ground's radial gradient, through three colours: at the heart, midway, at the corners. */
+function groundGradient(ctx: CanvasRenderingContext2D, world: World, colours: readonly string[]): CanvasGradient {
+  const { cx, cy } = world.heart;
+  const g = ctx.createRadialGradient(cx, cy, 0, cx, cy, 1450);
+  g.addColorStop(0, colours[0]!);
+  g.addColorStop(0.42, colours[1]!);
+  g.addColorStop(1, colours[2]!);
+  return g;
+}
+
+/**
+ * The still ground: gradient, the body's cells, and construction dots. Each cell is the ground lifted
+ * a little toward the tissue's tint, with a lit rim above and to the left and a shaded one below.
+ */
 export function drawGround(ctx: CanvasRenderingContext2D, world: World, art: GroundArt, view: View): void {
-  const { palette, heart } = world;
-  const ground = ctx.createRadialGradient(heart.cx, heart.cy, 0, heart.cx, heart.cy, 1450);
-  ground.addColorStop(0, palette.ground[0]);
-  ground.addColorStop(0.42, palette.ground[1]);
-  ground.addColorStop(1, palette.ground[2]);
-  ctx.fillStyle = ground;
+  const { palette } = world;
+  const tint = hex(palette.tissue);
+  const toward = (colour: string, t: number) => groundGradient(ctx, world, palette.ground.map((g) => mix(g, colour, t)));
+  ctx.fillStyle = groundGradient(ctx, world, palette.ground);
   fillView(ctx, view);
+  const rim = pixels(view, 1, 0.9);
+  ctx.fillStyle = toward(tint, 0.14);
+  for (const path of art.cells) fillShifted(ctx, path, -rim, -rim);
+  ctx.fillStyle = toward("#000000", 0.3);
+  for (const path of art.cells) fillShifted(ctx, path, rim, rim);
   art.cells.forEach((path, i) => {
-    ctx.fillStyle = rgba(palette.tissue, 0.022 + (0.05 * i) / (CELL_TONES - 1));
+    ctx.fillStyle = toward(tint, 0.05 + (0.06 * i) / (CELL_TONES - 1));
     ctx.fill(path);
   });
-  ctx.fillStyle = rgba(palette.tissue, 0.08);
+  ctx.fillStyle = toward("#000000", 0.4);
+  fillShifted(ctx, art.nuclei, rim * 0.6, rim * 0.6);
+  ctx.fillStyle = toward(tint, 0.17);
   ctx.fill(art.nuclei);
   ctx.fillStyle = palette.grid;
   ctx.fill(art.dots);
