@@ -255,7 +255,9 @@ export function drawOrgans(ctx: CanvasRenderingContext2D, world: World, clock: C
   const { palette } = world;
   const p = new OrganPasses(step);
   for (const o of world.organs) {
-    if (!seesDisc(view, o.x, o.y, o.radius + 40)) continue;
+    // An organ reaches as far as its housing's shadow, or the end of its inlet pipe.
+    const inletReach = o.inlet ? Math.hypot(o.inlet.x - o.x, o.inlet.y - o.y) + Math.max(3, o.inlet.width) + 4 : 0;
+    if (!seesDisc(view, o.x, o.y, Math.max(o.radius + 40, inletReach))) continue;
     if (o.kind === "iris") iris(p, o, clock);
     else if (o.kind === "escapement") escapement(p, o, clock);
     else lung(p, o, clock);

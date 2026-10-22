@@ -41,7 +41,8 @@ export function placeOrgans(rng: Rng, heart: Heart): Organ[] {
     if (x < radius + 40 || y < radius + 40 || x > 2000 - radius - 40 || y > 2000 - radius - 40) continue;
     if (organs.some((o) => Math.hypot(o.x - x, o.y - y) < o.radius + radius + 170)) continue;
     const angle = rng.range(0, TAU);
-    const count = kind === "iris" ? rng.pick([7, 9, 11, 12]) : kind === "escapement" ? rng.pick([15, 18, 20, 24]) : rng.int(5, 8);
+    // An escape wheel turns 36 teeth per cycle; with teeth dividing 144 its four windows close the cycle too.
+    const count = kind === "iris" ? rng.pick([7, 9, 11, 12]) : kind === "escapement" ? rng.pick([16, 18, 24, 36]) : rng.int(5, 8);
     organs.push({ kind, x, y, radius, angle, count, delay: 0, inlet: null });
   }
   return organs;

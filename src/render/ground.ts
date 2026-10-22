@@ -1,6 +1,6 @@
 // The ground the machine lies on: a deep radial gradient, the body's cells, and dotted construction rings
 // and rays centred on the heart (all still, kept in a bitmap layer); the light the heart throws around
-// itself; and a veil that darkens the far corners of the still layers.
+// itself; and a veil that darkens the ground's far corners.
 
 import { TAU } from "../engine/geometry.js";
 import { clamp01, type Clock } from "../engine/rhythm.js";
@@ -165,17 +165,12 @@ export function drawHeartLight(ctx: CanvasRenderingContext2D, world: World, cloc
   ctx.globalCompositeOperation = "source-over";
 }
 
-/**
- * Darkens what is already drawn toward the corners, so that the eye settles on the heart. On a layer
- * with transparency, `source-atop` darkens only what the layer holds.
- */
-export function drawVeil(ctx: CanvasRenderingContext2D, world: World, view: View, mode: GlobalCompositeOperation = "source-over"): void {
+/** Darkens the ground toward the corners, so that the eye settles on the heart. */
+export function drawVeil(ctx: CanvasRenderingContext2D, world: World, view: View): void {
   const { heart } = world;
   const veil = ctx.createRadialGradient(heart.cx, heart.cy, 640, heart.cx, heart.cy, 1500);
   veil.addColorStop(0, "rgba(0, 0, 0, 0)");
   veil.addColorStop(1, "rgba(0, 0, 0, 0.3)");
-  ctx.globalCompositeOperation = mode;
   ctx.fillStyle = veil;
   fillView(ctx, view);
-  ctx.globalCompositeOperation = "source-over";
 }

@@ -256,7 +256,8 @@ export function drawCouplings(ctx: CanvasRenderingContext2D, world: World, clock
     const angle = gearAngle(driver, train, clock);
     circle(edge, j.x, j.y, r + 1.3);
     circle(cap, j.x, j.y, r);
-    polygon(nut, j.x, j.y, r * 0.52, 6, angle);
+    // The nut has the driver's symmetry (doubled below five sides), so it too closes the cycle.
+    polygon(nut, j.x, j.y, r * 0.52, driver.symmetry < 5 ? 2 * driver.symmetry : driver.symmetry, angle);
     circle(dots, j.x, j.y, Math.max(0.6, r * 0.18));
     for (let k = 0; k < driver.symmetry; k++) {
       const a = angle + ((k + 0.5) * TAU) / driver.symmetry;

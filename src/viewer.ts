@@ -86,9 +86,12 @@ function pause(): void {
   ui.pause.setAttribute("aria-pressed", "true");
 }
 
-/** Jumps to a time (wrapped into the cycle) and redraws at once; playback continues from there. */
+/**
+ * Jumps to a time and redraws at once; playback continues from there. The slider's own range is
+ * 0–60 000 ms (both ends are the same moment of the machine); a step past either end wraps around.
+ */
 function seek(timeMs: number): void {
-  state.timeMs = ((timeMs % CYCLE_MS) + CYCLE_MS) % CYCLE_MS;
+  state.timeMs = timeMs >= 0 && timeMs <= CYCLE_MS ? timeMs : ((timeMs % CYCLE_MS) + CYCLE_MS) % CYCLE_MS;
   state.anchorWall = performance.now();
   state.anchorTime = state.timeMs;
   draw();

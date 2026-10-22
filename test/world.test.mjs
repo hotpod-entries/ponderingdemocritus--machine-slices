@@ -107,6 +107,12 @@ test("after one cycle every gear shows the same picture again", () => {
   }
 });
 
+test("escape wheels close the cycle too: 36 teeth a cycle, four windows", () => {
+  for (const w of worlds) {
+    for (const o of w.organs) if (o.kind === "escapement") assert.equal((36 * 4) % o.count, 0, `${o.count} teeth`);
+  }
+});
+
 test("each branch starts where its parent ends, and distance from the heart grows along it", () => {
   for (const w of worlds) {
     for (const c of w.vessels.chains) {
