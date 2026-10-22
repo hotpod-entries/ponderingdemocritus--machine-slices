@@ -40,10 +40,18 @@ export function buildVesselArt(world: World, view: View, step: number): VesselAr
     tube(edge, c.xs, c.ys, half.map((h) => h + EDGE));
     tube(wall, c.xs, c.ys, half);
     if (c.ws[n - 1]! > 2.6) tube(lumen, c.xs, c.ys, half.map((h) => h * 0.42));
-    // The highlight rides on the side of the tube that faces the light.
+    // The highlight rides on the side of the tube that faces the light; a side branch's starts outside
+    // its parent's wall, so that it never crosses the parent.
     const { nx, ny } = normals(c.xs, c.ys);
     const centre = half.map((h, i) => -(nx[i]! * LIGHT_X + ny[i]! * LIGHT_Y) * h * 0.52);
-    band(shine, c.xs, c.ys, nx, ny, centre.map((o, i) => o - half[i]! * 0.13), centre.map((o, i) => o + half[i]! * 0.13));
+    const parent = world.vessels.chains[c.parent];
+    const parentWidth = parent ? parent.ws[parent.ws.length - 1]! : 0;
+    const clear = c.ws[n - 1]! < 0.75 * parentWidth ? 0.6 * parentWidth : 0;
+    const from = c.ds.findIndex((d) => d - c.ds[0]! >= clear);
+    if (from >= 0 && from < n - 1) {
+      const part = <T>(a: ArrayLike<T>) => Array.prototype.slice.call(a, from) as T[];
+      band(shine, part(c.xs), part(c.ys), part(nx), part(ny), part(centre.map((o, i) => o - half[i]! * 0.13)), part(centre.map((o, i) => o + half[i]! * 0.13)));
+    }
     if (c.ws[n - 1]! >= 7) addCollars(collars, seams, c);
   }
   for (const t of world.vessels.tips) {
