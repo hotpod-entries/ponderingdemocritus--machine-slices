@@ -44,7 +44,8 @@ function say(message: string, error = false): void {
 function draw(): void {
   renderFrame(ui.canvas, { seed: state.seed, timeMs: state.timeMs, viewport: WHOLE });
   const ms = Math.round(state.timeMs);
-  const text = `${ms} ms · beat ${Math.floor(state.timeMs / BEAT_MS) + 1} of ${CYCLE_MS / BEAT_MS}`;
+  const beat = Math.floor((state.timeMs % CYCLE_MS) / BEAT_MS) + 1;
+  const text = `${ms} ms · beat ${beat} of ${CYCLE_MS / BEAT_MS}`;
   ui.time.value = String(ms);
   ui.time.setAttribute("aria-valuetext", text);
   ui.readout.textContent = text;
