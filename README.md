@@ -51,18 +51,18 @@ renderFrame(canvas, { seed: "0x" + "11".repeat(32), timeMs: 2137, viewport: { x:
 | --- | --- |
 | `src/runtime.ts` | the public entry: validation, the world cache, the canvas |
 | `src/engine/` | input validation, seeded random streams, the clock and its rhythms, geometry |
-| `src/world/` | the machine as plain data, built once per seed: heart (and its kinematics), organs, vessels, gears, palette |
+| `src/world/` | the machine as plain data, built once per seed: heart (and its kinematics), tissue, organs, vessels, gears, palette |
 | `src/render/` | Canvas 2D drawing of a world at a moment through a viewport, one module per part |
 | `src/viewer.ts` | the page's controls and the only clock that runs by itself |
 
 **Slices match the whole.** Everything is drawn in world units under one viewport transform. Two rasterizer details would otherwise make a small canvas differ from the same region of a large one, and `src/render/shapes.ts` handles both: paths contain only straight edges at most 1.6 device pixels long (Skia re-quantizes edges it clips at a canvas border, so long edges and curves crossing a slice's border would shift along their length), and every world path carries two specks outside the world so that its bounds, which select the antialiasing strategy, are the same through every window. The context is requested with `willReadFrequently`, which keeps canvases of every size on the same CPU rasterizer.
 
-**Speed.** What never moves is kept between frames: the ground (with its cells) and the vessels as bitmap layers of the canvas's size, copied in at whole pixels; each gear as sprites rasterized once per scale and stamped at its angle (gears too large for a sprite at that scale are drawn from paths).
+**Speed.** What never moves is kept between frames: the ground (with its cells) and the vessels as bitmap layers of the canvas's size, copied in at whole pixels (as paths instead on canvases above 4.5 million pixels); each gear as sprites rasterized once per scale and stamped at its angle (gears too large for a sprite at that scale are drawn from paths).
 
 ## Choices where the brief is silent
 
 - Time wraps every 60 000 ms (the cycle); any finite nonnegative time is valid, and the viewer's slider covers one cycle and loops while playing.
-- A viewport whose aspect differs from the canvas's is stretched to fill it, as the brief asks; line widths that keep thin details legible are set in device pixels, so slices at equal scale match exactly and other scales stay readable.
+- A viewport whose aspect differs from the canvas's is stretched to fill it, as the brief asks. A few offsets that keep details legible at small scales (drop shadows, lit edges, the reach of a glow) are set in device pixels: slices at equal scale match exactly, and other scales stay readable.
 - The viewer renders at the canvas's displayed size times the device pixel ratio (at most 2), capped at 1440 pixels; it starts paused, and scrubbing while playing continues from the new time.
 - A refused preview seed leaves the current picture and seed in place and says why in the status line.
 - The server binds 127.0.0.1, serves `/` and the compiled modules under `/dist/`, answers 404 to anything else and 405 to other methods on those paths, and exits with status 2 and the reason on stderr for an unknown argument or a port outside 1–65535.
@@ -70,7 +70,7 @@ renderFrame(canvas, { seed: "0x" + "11".repeat(32), timeMs: 2137, viewport: { x:
 ## Check an entry
 
 ```sh
-npm test                  # unit tests of validation, the clock, randomness and the world's invariants
+npm test                  # unit tests: validation, the clock, randomness, the world's invariants, the server
 npx playwright install chromium
 npm run check:round1      # the round's browser checks
 ```
