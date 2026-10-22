@@ -6,7 +6,7 @@
 import { TAU } from "../engine/geometry.js";
 import { BEAT_MS, ratchet, wrap, type Clock } from "../engine/rhythm.js";
 import type { Organ } from "../world/organs.js";
-import { rgba } from "../world/palette.js";
+import { mix, rgba } from "../world/palette.js";
 import type { World } from "../world/world.js";
 import { heartLit } from "./ground.js";
 import { bar, circle, fillShifted, Glow, LEVELS, LIGHT_X, LIGHT_Y, Pen, ring, rotatedRect } from "./shapes.js";
@@ -266,7 +266,7 @@ export function drawOrgans(ctx: CanvasRenderingContext2D, world: World, clock: C
   const drop = pixels(view, 4, 5);
   ctx.fillStyle = palette.shade;
   fillShifted(ctx, p.shadow.path, drop * 0.8, drop);
-  ctx.fillStyle = palette.ink;
+  ctx.fillStyle = mix(palette.ink, body.dark, 0.55);
   ctx.fill(p.plate.path);
   ctx.globalAlpha = 0.09;
   ctx.fillStyle = body.shine;
