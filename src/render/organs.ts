@@ -12,8 +12,8 @@ import { heartLit } from "./ground.js";
 import { bar, circle, fillShifted, Glow, LEVELS, LIGHT_X, LIGHT_Y, Pen, ring, rotatedRect } from "./shapes.js";
 import { pixels, seesDisc, type View } from "./view.js";
 
-/** Adds a closed polygon, reversed if needed so that it is wound clockwise on screen. */
-function polygon(pen: Pen, xs: number[], ys: number[]): void {
+/** Adds a closed outline through the points, reversed if needed so that it is wound clockwise on screen. */
+function outline(pen: Pen, xs: number[], ys: number[]): void {
   let area = 0;
   for (let i = 0; i < xs.length; i++) {
     const j = (i + 1) % xs.length;
@@ -25,55 +25,60 @@ function polygon(pen: Pen, xs: number[], ys: number[]): void {
   pen.close();
 }
 
-/** Every pass of the organs' drawing, filled in this order. */
+/** Every pass of the organs' drawing, in the order they are filled. */
 class OrganPasses {
   /** Drop shadows: plates and bellows. */
   readonly shadow: Pen;
   readonly plate: Pen;
-  readonly rim: Pen;
-  readonly bolts: Pen;
+  /** Engine-turned rings on a plate. */
+  readonly turned: Pen;
+  /** The light behind an iris's blades. */
+  readonly glow: Glow;
+  /** An iris's blades in three tones, by how much they face the light, and the seams between them. */
   readonly blades: [Pen, Pen, Pen];
   readonly seams: Pen;
+  /** Housing rings and inlet pipes, and the housings' bolts. */
+  readonly rim: Pen;
+  readonly bolts: Pen;
   /** A lung's bellows, the folds between their pleats, and the ridges of the pleats. */
   readonly leather: Pen;
   readonly folds: Pen;
   readonly ridges: Pen;
-  readonly steel: Pen;
-  /** Engine-turned rings on a plate. */
-  readonly turned: Pen;
   /** The pendulum, behind the wheel. */
   readonly backSteel: Pen;
   readonly backBrass: Pen;
   readonly backDark: Pen;
+  /** Escape wheels and the lungs' plates, then the wheels' windows. */
   readonly brass: Pen;
   readonly dark: Pen;
-  /** Parts in front of the anchor: the pivot cap and jewel settings. */
+  /** The anchor. */
+  readonly steel: Pen;
+  /** Parts in front of the anchor: the pivot cap, the lungs' manifolds, and jewel settings. */
   readonly front: Pen;
   readonly frontDark: Pen;
-  readonly glow: Glow;
   readonly jewels: Glow;
 
   constructor(step: number) {
     const pen = () => new Pen(step);
     this.shadow = pen();
     this.plate = pen();
-    this.rim = pen();
-    this.bolts = pen();
+    this.turned = pen();
+    this.glow = new Glow(step);
     this.blades = [pen(), pen(), pen()];
     this.seams = pen();
+    this.rim = pen();
+    this.bolts = pen();
     this.leather = pen();
     this.folds = pen();
     this.ridges = pen();
-    this.steel = pen();
-    this.turned = pen();
     this.backSteel = pen();
     this.backBrass = pen();
     this.backDark = pen();
     this.brass = pen();
     this.dark = pen();
+    this.steel = pen();
     this.front = pen();
     this.frontDark = pen();
-    this.glow = new Glow(step);
     this.jewels = new Glow(step);
   }
 }
@@ -141,7 +146,7 @@ function iris(p: OrganPasses, o: Organ, clock: Clock): void {
     }
     // Blades facing the light are brighter.
     const facing = Math.cos(phi(k)) * LIGHT_X + Math.sin(phi(k)) * LIGHT_Y;
-    polygon(p.blades[facing > 0.35 ? 2 : facing < -0.35 ? 0 : 1], xs, ys);
+    outline(p.blades[facing > 0.35 ? 2 : facing < -0.35 ? 0 : 1], xs, ys);
     const [wx, wy] = vertex(k + 1);
     bar(p.seams, wx, wy, ax, ay, Math.max(0.8, o.radius * 0.016));
   }
@@ -177,7 +182,7 @@ function escapement(p: OrganPasses, o: Organ, clock: Clock): void {
       ys.push(wy + r * Math.sin(t));
     }
   }
-  polygon(p.brass, xs, ys);
+  outline(p.brass, xs, ys);
   for (let j = 0; j < 4; j++) {
     const t0 = base + (j * TAU) / 4 + 0.22, t1 = base + ((j + 1) * TAU) / 4 - 0.22;
     const hx: number[] = [], hy: number[] = [];
@@ -191,7 +196,7 @@ function escapement(p: OrganPasses, o: Organ, clock: Clock): void {
       hx.push(wx + wheelR * 0.24 * Math.cos(t));
       hy.push(wy + wheelR * 0.24 * Math.sin(t));
     }
-    polygon(p.dark, hx, hy);
+    outline(p.dark, hx, hy);
   }
 
   // The anchor's arms reach down to pallets on either side of the wheel's top.
@@ -231,8 +236,8 @@ function lung(p: OrganPasses, o: Organ, clock: Clock): void {
       xs.push(px);
       ys.push(py);
     }
-    polygon(p.leather, xs, ys);
-    polygon(p.shadow, xs, ys);
+    outline(p.leather, xs, ys);
+    outline(p.shadow, xs, ys);
     for (let k = 1; k < 2 * n; k++) bar(k % 2 ? p.folds : p.ridges, ...at(x(k), -half(k)), ...at(x(k), half(k)), R * 0.014);
     // The plates that hold each bellows: one on the manifold, one moving with the breath.
     for (const [a0, a1] of [[start - 0.07 * R, start], [start + length, start + length + 0.08 * R]] as const) {
@@ -266,10 +271,6 @@ export function drawOrgans(ctx: CanvasRenderingContext2D, world: World, clock: C
   ctx.fill(p.turned.path);
   ctx.globalAlpha = 1;
   p.glow.fill(ctx, rgba(palette.glow, 1), 0.55);
-  ctx.fillStyle = heartLit(ctx, world, body.light, body.base, body.dark);
-  ctx.fill(p.rim.path);
-  ctx.fillStyle = body.shine;
-  ctx.fill(p.bolts.path);
   const tones = [steel.dark, steel.base, steel.light];
   p.blades.forEach((pen, i) => {
     ctx.fillStyle = tones[i]!;
@@ -277,6 +278,10 @@ export function drawOrgans(ctx: CanvasRenderingContext2D, world: World, clock: C
   });
   ctx.fillStyle = palette.ink;
   ctx.fill(p.seams.path);
+  ctx.fillStyle = heartLit(ctx, world, body.light, body.base, body.dark);
+  ctx.fill(p.rim.path);
+  ctx.fillStyle = body.shine;
+  ctx.fill(p.bolts.path);
   ctx.fillStyle = heartLit(ctx, world, palette.vessel.shine, palette.vessel.wall, palette.vessel.edge);
   ctx.fill(p.leather.path);
   ctx.globalAlpha = 0.6;
