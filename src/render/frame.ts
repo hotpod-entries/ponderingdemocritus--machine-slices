@@ -1,5 +1,5 @@
-// One frame, back to front: ground, the heart's light, deep gears, working gears, vessels, couplings,
-// organs, pulses, tips, heart. Everything is drawn in world units under one viewport transform,
+// One frame, back to front: ground, the heart's light, the cells' glow, deep gears, working gears,
+// vessels, couplings, organs, pulses, tips, heart. Everything is drawn in world units under one viewport transform,
 // and the canvas state is saved and restored around the frame.
 //
 // What never moves is kept between frames: the ground and the vessels as bitmap layers of the canvas's
@@ -10,7 +10,7 @@ import type { Clock } from "../engine/rhythm.js";
 import type { Viewport } from "../engine/validate.js";
 import type { World } from "../world/world.js";
 import { drawCouplings, drawGears, newGearCache, type GearCache, type MakeCanvas } from "./gears.js";
-import { buildGroundArt, drawGround, drawHeartLight, drawVeil } from "./ground.js";
+import { buildGroundArt, drawCellGlow, drawGround, drawHeartLight, drawVeil } from "./ground.js";
 import { buildHeartArt, drawHeart, type HeartArt } from "./heart.js";
 import { drawOrgans } from "./organs.js";
 import { MAX_EDGE_PX } from "./shapes.js";
@@ -133,6 +133,7 @@ export function drawFrame(
   ctx.drawImage(layers.ground, 0, 0);
   ctx.setTransform(sx, 0, 0, sy, -viewport.x * sx, -viewport.y * sy);
   drawHeartLight(ctx, world, clock, view);
+  drawCellGlow(ctx, world, clock, view, step);
   drawGears(ctx, world, gears, clock, view, step, scale, make, "deep");
   drawGears(ctx, world, gears, clock, view, step, scale, make, "working");
   ctx.save();

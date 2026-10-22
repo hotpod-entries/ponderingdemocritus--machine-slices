@@ -58,7 +58,7 @@ export interface Vessels {
 }
 
 const WORLD = 2000;
-const SPACING = 46;
+const SPACING = 40;
 const INFLUENCE = 150;
 const KILL = 24;
 const STEP = 11;

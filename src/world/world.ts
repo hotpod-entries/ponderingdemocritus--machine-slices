@@ -8,6 +8,7 @@ import { designGears, type GearWorks } from "./gears.js";
 import { designHeart, type Heart } from "./heart.js";
 import { connectOrgans, placeOrgans, type Organ } from "./organs.js";
 import { choosePalette, type Palette } from "./palette.js";
+import { growTissue, type Cell } from "./tissue.js";
 import { growVessels, VesselField, type Vessels } from "./vessels.js";
 
 /** How fast a pulse travels down the vessels, in world units per millisecond. */
@@ -18,6 +19,7 @@ export const PULSE_LENGTH = 96;
 export interface World {
   seedHex: string;
   palette: Palette;
+  tissue: Cell[];
   heart: Heart;
   organs: Organ[];
   vessels: Vessels;
@@ -28,10 +30,11 @@ export function buildWorld(seedHex: string): World {
   const words = seedWords(seedHex);
   const centre = WORLD_SIZE / 2;
   const palette = choosePalette(stream(words, "palette"));
+  const tissue = growTissue(stream(words, "tissue"));
   const heart = designHeart(stream(words, "heart"), centre, centre);
   const organs = placeOrgans(stream(words, "organs"), heart);
   const vessels = growVessels(stream(words, "vessels"), heart, organs);
   connectOrgans(organs, vessels, heart, PULSE_SPEED);
   const works = designGears(stream(words, "gears"), heart, organs, vessels, new VesselField(vessels, 6), PULSE_SPEED);
-  return { seedHex, palette, heart, organs, vessels, works };
+  return { seedHex, palette, tissue, heart, organs, vessels, works };
 }

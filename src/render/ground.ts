@@ -1,13 +1,13 @@
-// The ground the machine lies on: a deep radial gradient and dotted construction rings and rays centred
-// on the heart (both still, kept in a bitmap layer), the light the heart throws around itself, and a
-// veil that darkens the far corners of the still layers.
+// The ground the machine lies on: a deep radial gradient, the body's cells, and dotted construction rings
+// and rays centred on the heart (all still, kept in a bitmap layer); the light the heart throws around
+// itself; and a veil that darkens the far corners of the still layers.
 
 import { TAU } from "../engine/geometry.js";
 import { clamp01, type Clock } from "../engine/rhythm.js";
 import { mix, rgba } from "../world/palette.js";
 import type { World } from "../world/world.js";
-import { circle, Pen } from "./shapes.js";
-import { seesDisc, type View } from "./view.js";
+import { circle, Glow, hole, LEVELS, Pen } from "./shapes.js";
+import { sees, seesDisc, type View } from "./view.js";
 
 /** Distance between the dots of a construction line, and their radius. */
 const DOT_STEP = 15;
@@ -16,8 +16,43 @@ const DOT_RADIUS = 1.15;
 const LIT_FROM = 0.8;
 const LIT_TO = 1500;
 
-export function buildGroundArt(world: World, view: View, step: number): Path2D {
+/** The still art of the ground: cells in a few densities, their nuclei, and the construction dots. */
+export interface GroundArt {
+  cells: Path2D[];
+  nuclei: Path2D;
+  dots: Path2D;
+}
+
+/** A small cog: a toothed disc with a hole, as a cell's nucleus. */
+function cog(pen: Pen, x: number, y: number, r: number, teeth: number): void {
+  const p = Math.PI / teeth;
+  for (let k = 0; k < 2 * teeth; k++) {
+    const a = k * p, out = k % 2 === 0;
+    const r0 = out ? r : r * 0.74;
+    if (k === 0) pen.move(x + r0 * Math.cos(a - 0.4 * p), y + r0 * Math.sin(a - 0.4 * p));
+    else pen.line(x + r0 * Math.cos(a - 0.4 * p), y + r0 * Math.sin(a - 0.4 * p));
+    pen.line(x + r0 * Math.cos(a + 0.4 * p), y + r0 * Math.sin(a + 0.4 * p));
+  }
+  pen.close();
+  hole(pen, x, y, r * 0.32);
+}
+
+/** Cell densities: each cell is drawn in the nearest of these. */
+const CELL_TONES = 4;
+
+export function buildGroundArt(world: World, view: View, step: number): GroundArt {
   const { heart } = world;
+  const cells = Array.from({ length: CELL_TONES }, () => new Pen(step));
+  const nuclei = new Pen(step);
+  for (const c of world.tissue) {
+    if (!sees(view, { x0: c.x0, y0: c.y0, x1: c.x1, y1: c.y1 })) continue;
+    const pen = cells[Math.min(CELL_TONES - 1, Math.floor(c.shade * CELL_TONES))]!;
+    pen.move(c.xs[0]!, c.ys[0]!);
+    for (let k = 1; k < c.xs.length; k++) pen.line(c.xs[k]!, c.ys[k]!);
+    pen.close();
+    if (c.cog) cog(nuclei, c.nx, c.ny, c.nr * 1.5, c.cog);
+    else circle(nuclei, c.nx, c.ny, c.nr);
+  }
   const pen = new Pen(step);
   const dot = (x: number, y: number) => {
     if (seesDisc(view, x, y, DOT_RADIUS)) circle(pen, x, y, DOT_RADIUS);
@@ -32,7 +67,7 @@ export function buildGroundArt(world: World, view: View, step: number): Path2D {
     const a = heart.axes[0]! + ((i + 0.5) * TAU) / rays;
     for (let r = inner + DOT_STEP; r < 1480; r += DOT_STEP) dot(heart.cx + r * Math.cos(a), heart.cy + r * Math.sin(a));
   }
-  return pen.path;
+  return { cells: cells.map((c) => c.path), nuclei: nuclei.path, dots: pen.path };
 }
 
 /**
@@ -59,8 +94,8 @@ function fillView(ctx: CanvasRenderingContext2D, view: View): void {
   ctx.fillRect(view.x0 - 4, view.y0 - 4, view.x1 - view.x0 + 8, view.y1 - view.y0 + 8);
 }
 
-/** The still ground: gradient and construction dots. */
-export function drawGround(ctx: CanvasRenderingContext2D, world: World, marks: Path2D, view: View): void {
+/** The still ground: gradient, the body's cells, and construction dots. */
+export function drawGround(ctx: CanvasRenderingContext2D, world: World, art: GroundArt, view: View): void {
   const { palette, heart } = world;
   const ground = ctx.createRadialGradient(heart.cx, heart.cy, 0, heart.cx, heart.cy, 1450);
   ground.addColorStop(0, palette.ground[0]);
@@ -68,8 +103,30 @@ export function drawGround(ctx: CanvasRenderingContext2D, world: World, marks: P
   ground.addColorStop(1, palette.ground[2]);
   ctx.fillStyle = ground;
   fillView(ctx, view);
+  art.cells.forEach((path, i) => {
+    ctx.fillStyle = rgba(palette.tissue, 0.022 + (0.05 * i) / (CELL_TONES - 1));
+    ctx.fill(path);
+  });
+  ctx.fillStyle = rgba(palette.tissue, 0.08);
+  ctx.fill(art.nuclei);
   ctx.fillStyle = palette.grid;
-  ctx.fill(marks);
+  ctx.fill(art.dots);
+}
+
+/**
+ * The cells' nuclei glow faintly with the breath, a slow wave that leaves the heart with each breath
+ * and takes a whole breath to reach the corners.
+ */
+export function drawCellGlow(ctx: CanvasRenderingContext2D, world: World, clock: Clock, view: View, step: number): void {
+  const { heart, palette } = world;
+  const glow = new Glow(step);
+  for (const c of world.tissue) {
+    if (!seesDisc(view, c.nx, c.ny, c.nr)) continue;
+    const wave = 0.5 - 0.5 * Math.cos(TAU * (clock.breathPhase - Math.hypot(c.nx - heart.cx, c.ny - heart.cy) / 1400));
+    const level = Math.round(LEVELS * wave * wave);
+    if (level > 0) circle(glow.at(level), c.nx, c.ny, c.nr * 0.55);
+  }
+  glow.fill(ctx, rgba(palette.glow, 1), 0.16);
 }
 
 /** The heart's light: it swells with each contraction and, slower, with the breath. */

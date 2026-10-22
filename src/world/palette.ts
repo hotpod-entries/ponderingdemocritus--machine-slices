@@ -18,6 +18,8 @@ export interface Palette {
   ground: readonly [string, string, string];
   /** Faint construction lines of the ground. */
   grid: string;
+  /** The tint of the body's cells, drawn faint over the ground. */
+  tissue: Rgb;
   /** Outlines and the darkest shadows. */
   ink: string;
   /** Drop shadows, translucent. */
@@ -41,6 +43,7 @@ const PALETTES: readonly Palette[] = [
     name: "verdigris and ember",
     ground: ["#1b2b2b", "#0f1a1a", "#060b0b"],
     grid: "rgba(165, 214, 200, 0.075)",
+    tissue: [150, 225, 205],
     ink: "#040808",
     shade: "rgba(0, 0, 0, 0.5)",
     metals: [
@@ -48,7 +51,7 @@ const PALETTES: readonly Palette[] = [
       { dark: "#5c2e1b", base: "#a65c39", light: "#d8946b", shine: "#f7cbab" },
       { dark: "#34444a", base: "#72868c", light: "#adbdc1", shine: "#e3eef0" },
     ],
-    deep: { dark: "#0d1617", base: "#172526", light: "#203233", shine: "#2a4142" },
+    deep: { dark: "#0f1a1b", base: "#1c2d2e", light: "#28403f", shine: "#335150" },
     vessel: { edge: "#040c0c", wall: "#2b5650", lumen: "#081413", shine: "#a3d8c9", collar: "#6f9d90" },
     heart: {
       body: { dark: "#4f3a1f", base: "#9a7843", light: "#cfae74", shine: "#f3dfae" },
@@ -61,6 +64,7 @@ const PALETTES: readonly Palette[] = [
     name: "steel and cyan",
     ground: ["#1b2232", "#0e121c", "#05070c"],
     grid: "rgba(170, 196, 240, 0.07)",
+    tissue: [165, 195, 250],
     ink: "#030509",
     shade: "rgba(0, 0, 0, 0.5)",
     metals: [
@@ -68,7 +72,7 @@ const PALETTES: readonly Palette[] = [
       { dark: "#2b2f37", base: "#5b626f", light: "#949caa", shine: "#d2d7df" },
       { dark: "#6a5226", base: "#ad8b4c", light: "#dbbf88", shine: "#f8ebc4" },
     ],
-    deep: { dark: "#0c1019", base: "#151b28", light: "#1e2636", shine: "#283244" },
+    deep: { dark: "#0e121c", base: "#192032", light: "#242e44", shine: "#2f3b55" },
     vessel: { edge: "#03050a", wall: "#243859", lumen: "#060b15", shine: "#a2c4f2", collar: "#607ba7" },
     heart: {
       body: { dark: "#353d4a", base: "#6f7b8c", light: "#aab6c6", shine: "#e8eef7" },
@@ -81,6 +85,7 @@ const PALETTES: readonly Palette[] = [
     name: "bone and vermilion",
     ground: ["#2b2420", "#18120f", "#090606"],
     grid: "rgba(240, 218, 196, 0.06)",
+    tissue: [255, 196, 172],
     ink: "#070403",
     shade: "rgba(0, 0, 0, 0.5)",
     metals: [
@@ -88,7 +93,7 @@ const PALETTES: readonly Palette[] = [
       { dark: "#3a3432", base: "#6f6662", light: "#a69c96", shine: "#dad2cc" },
       { dark: "#6a4c1f", base: "#b7893d", light: "#e1bc75", shine: "#fbe7b8" },
     ],
-    deep: { dark: "#1a1412", base: "#251d19", light: "#302620", shine: "#3b3028" },
+    deep: { dark: "#1c1513", base: "#2c221d", light: "#3a2d26", shine: "#47372e" },
     vessel: { edge: "#0a0504", wall: "#5b2a23", lumen: "#170806", shine: "#ebb6a6", collar: "#8f5b4d" },
     heart: {
       body: { dark: "#5f554a", base: "#a99b86", light: "#d8cbb4", shine: "#f8f0e0" },
@@ -101,6 +106,7 @@ const PALETTES: readonly Palette[] = [
     name: "ink and gold",
     ground: ["#25211a", "#14120d", "#080705"],
     grid: "rgba(236, 222, 180, 0.065)",
+    tissue: [250, 222, 160],
     ink: "#060504",
     shade: "rgba(0, 0, 0, 0.5)",
     metals: [
@@ -108,7 +114,7 @@ const PALETTES: readonly Palette[] = [
       { dark: "#484846", base: "#888783", light: "#c1bfb9", shine: "#efede8" },
       { dark: "#593a21", base: "#92643d", light: "#c6945e", shine: "#ecc89f" },
     ],
-    deep: { dark: "#16140f", base: "#211e17", light: "#2c2820", shine: "#373229" },
+    deep: { dark: "#18150f", base: "#28241b", light: "#353024", shine: "#423b2d" },
     vessel: { edge: "#060504", wall: "#3e3a2b", lumen: "#0d0c08", shine: "#dcd4b0", collar: "#7f7759" },
     heart: {
       body: { dark: "#62491d", base: "#b0873d", light: "#e0bc74", shine: "#fcecbd" },

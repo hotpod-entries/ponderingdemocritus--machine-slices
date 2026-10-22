@@ -24,6 +24,7 @@ The whole work is one body, 2000 × 2000 units, organised around a single heart.
 - **Vessels.** One tree per cylinder, grown outward from the cylinder heads by space colonization: scattered attraction points pull the nearest vessel tips toward them, and the trees compete for the same points, so they share the body out like arteries. Widths follow Murray's law. Every point knows its distance from the heart along the network.
 - **Pulses.** Every beat each cylinder sends a pulse of light down its tree. A pulse is wherever the network is at its distance from the heart, so one firing spreads through every branch at once and reaches the far tips two to three seconds later, a fading wake behind it; each tip flashes as it arrives.
 - **Gear trains.** Each working train is driven from a vessel junction (the coupling over the junction turns with it) and clicks forward one tooth when the pulse reaches that junction, so a wave of clicks runs outward with every heartbeat. Gears mesh exactly: centres a sum of pitch radii apart, each phase putting a tooth into a gap. Large, dim gears turn slowly in the deep layer behind.
+- **Tissue.** Under everything lie the body's cells: rounded Voronoi cells with their membranes and nuclei, some of the nuclei small cogs. The nuclei glow faintly with each breath, a slow wave that leaves the heart and reaches the corners a breath later.
 - **Organs.** Three to five larger mechanisms sit around the heart and the vessels grow to them: irises that open and close with the breath and flash when their pulse arrives, lungs whose two pleated bellows fill and empty with the breath, and escapements whose anchor and pendulum rock once every two beats while the escape wheel clicks.
 
 Every rhythm divides one 60-second cycle, so the machine at t and at t + 60 000 ms is the same picture and playback loops without a seam:
@@ -31,7 +32,7 @@ Every rhythm divides one 60-second cycle, so the machine at t and at t + 60 000 
 | Rhythm | Period | Per cycle | Drives |
 | --- | --- | --- | --- |
 | cycle | 60 000 ms | 1 | the whole machine repeats |
-| breath | 5 000 ms | 12 | the heart's light, the irises, the lungs |
+| breath | 5 000 ms | 12 | the heart's light, the cells' glow, the irises, the lungs |
 | heartbeat | 833⅓ ms | 72 | crank, pistons, pulses, gear clicks, escapements |
 
 The seed chooses everything else: the number of cylinders (5, 7 or 9) and the engine's proportions, the vessel trees, the organs, the gear trains, and one of four palettes (bone and vermilion, verdigris and ember, steel and cyan, ink and gold).
@@ -56,7 +57,7 @@ renderFrame(canvas, { seed: "0x" + "11".repeat(32), timeMs: 2137, viewport: { x:
 
 **Slices match the whole.** Everything is drawn in world units under one viewport transform. Two rasterizer details would otherwise make a small canvas differ from the same region of a large one, and `src/render/shapes.ts` handles both: paths contain only straight edges at most 1.6 device pixels long (Skia re-quantizes edges it clips at a canvas border, so long edges and curves crossing a slice's border would shift along their length), and every world path carries two specks outside the world so that its bounds, which select the antialiasing strategy, are the same through every window. The context is requested with `willReadFrequently`, which keeps canvases of every size on the same CPU rasterizer.
 
-**Speed.** What never moves is kept between frames: the ground and the vessels as bitmap layers of the canvas's size, copied in at whole pixels; each gear as sprites rasterized once per scale and stamped at its angle (gears too large for a sprite at that scale are drawn from paths).
+**Speed.** What never moves is kept between frames: the ground (with its cells) and the vessels as bitmap layers of the canvas's size, copied in at whole pixels; each gear as sprites rasterized once per scale and stamped at its angle (gears too large for a sprite at that scale are drawn from paths).
 
 ## Choices where the brief is silent
 
