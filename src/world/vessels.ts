@@ -8,6 +8,7 @@ import { boxOfPoints, Grid, PointIndex, type Box } from "../engine/geometry.js";
 import { fieldNoise, hashString, type Rng } from "../engine/random.js";
 import { smootherstep } from "../engine/rhythm.js";
 import type { Heart } from "./heart.js";
+import { organAttractors, type Organ } from "./organs.js";
 
 /** A run of vessel between two branch points (or a root, or a tip), as a smoothed polyline. */
 export interface Chain {
@@ -75,7 +76,7 @@ interface Forest {
 }
 
 /** Attraction points on a jittered grid, thinned by a slow noise field so that the vessels leave pockets. */
-function scatterAttractors(rng: Rng, heart: Heart): { x: number[]; y: number[] } {
+function scatterAttractors(rng: Rng, heart: Heart, organs: readonly Organ[]): { x: number[]; y: number[] } {
   const salt = hashString("pockets") ^ rng.u32();
   const x: number[] = [], y: number[] = [];
   const clear = heart.radius + 46;
@@ -84,6 +85,7 @@ function scatterAttractors(rng: Rng, heart: Heart): { x: number[]; y: number[] }
       const px = Math.min(WORLD - 6, Math.max(6, gx + rng.range(-0.45, 0.45) * SPACING));
       const py = Math.min(WORLD - 6, Math.max(6, gy + rng.range(-0.45, 0.45) * SPACING));
       if (Math.hypot(px - heart.cx, py - heart.cy) < clear) continue;
+      if (organs.some((o) => Math.hypot(px - o.x, py - o.y) < o.radius + 30)) continue;
       const keep = 0.14 + 0.86 * smootherstep((fieldNoise(px, py, 560, salt) - 0.3) / 0.3);
       if (rng.float() < keep) {
         x.push(px);
@@ -91,11 +93,17 @@ function scatterAttractors(rng: Rng, heart: Heart): { x: number[]; y: number[] }
       }
     }
   }
+  for (const o of organs) {
+    for (const p of organAttractors(o, heart)) {
+      x.push(p.x);
+      y.push(p.y);
+    }
+  }
   return { x, y };
 }
 
 /** Grows one tree per cylinder until no attraction point is left in reach. */
-function grow(rng: Rng, heart: Heart): Forest {
+function grow(rng: Rng, heart: Heart, organs: readonly Organ[]): Forest {
   const f: Forest = { x: [], y: [], parent: [], tree: [] };
   const dirX: number[] = [], dirY: number[] = [];
   const nodes = new PointIndex(WORLD, 30);
@@ -121,7 +129,7 @@ function grow(rng: Rng, heart: Heart): Forest {
     }
   });
 
-  const scattered = scatterAttractors(rng, heart);
+  const scattered = scatterAttractors(rng, heart, organs);
   const points = new PointIndex(WORLD, 30);
   scattered.x.forEach((x, i) => points.add(x, scattered.y[i]!));
   const alive = new Uint8Array(scattered.x.length).fill(1);
@@ -151,6 +159,7 @@ function grow(rng: Rng, heart: Heart): Forest {
       const x = f.x[n]! + STEP * dx, y = f.y[n]! + STEP * dy;
       if (x < 3 || y < 3 || x > WORLD - 3 || y > WORLD - 3) continue;
       if (Math.hypot(x - heart.cx, y - heart.cy) < heart.radius + 4) continue;
+      if (organs.some((o) => Math.hypot(x - o.x, y - o.y) < o.radius + 6)) continue;
       if (nodes.nearest(x, y, STEP * 0.6) >= 0) continue;
       born.push(add(x, y, n, f.tree[n]!, dx, dy));
     }
@@ -190,8 +199,8 @@ function smooth(xs: number[], ys: number[], rounds: number): { xs: number[]; ys:
   return { xs, ys };
 }
 
-export function growVessels(rng: Rng, heart: Heart): Vessels {
-  const f = grow(rng, heart);
+export function growVessels(rng: Rng, heart: Heart, organs: readonly Organ[]): Vessels {
+  const f = grow(rng, heart, organs);
   const count = f.x.length;
   const kids: number[][] = Array.from({ length: count }, () => []);
   for (let i = 0; i < count; i++) if (f.parent[i]! >= 0) kids[f.parent[i]!]!.push(i);
@@ -206,7 +215,7 @@ export function growVessels(rng: Rng, heart: Heart): Vessels {
   }
   let maxRadius = 1;
   for (let i = 0; i < count; i++) maxRadius = Math.max(maxRadius, radius[i]!);
-  const maxWidth = rng.range(22, 27);
+  const maxWidth = rng.range(28, 34);
   const widthOf = (n: number) => MIN_WIDTH + (maxWidth - MIN_WIDTH) * ((radius[n]! - 1) / Math.max(1e-9, maxRadius - 1)) ** 0.85;
 
   const chains: Chain[] = [], junctions: Junction[] = [], tips: Tip[] = [];
@@ -224,13 +233,15 @@ export function growVessels(rng: Rng, heart: Heart): Vessels {
         path.push(n);
       }
       const { xs, ys } = smooth(path.map((i) => f.x[i]!), path.map((i) => f.y[i]!), 2);
-      const width = widthOf(first), flare = widthOf(from);
+      // A branch leaves its parent slightly flared, like a fillet, then settles to its own width.
+      const width = widthOf(first), parentWidth = widthOf(from);
+      const flare = Math.min(parentWidth, width * 1.6);
       const ws = new Float64Array(xs.length), ds = new Float64Array(xs.length);
       let along = 0;
       for (let i = 0; i < xs.length; i++) {
         if (i > 0) along += Math.hypot(xs[i]! - xs[i - 1]!, ys[i]! - ys[i - 1]!);
         ds[i] = startDistance + along;
-        ws[i] = width + (flare - width) * Math.exp(-along / (1.2 * flare));
+        ws[i] = width + (flare - width) * Math.exp(-along / (0.45 * parentWidth));
       }
       const tree = f.tree[first]!;
       const index = chains.length;

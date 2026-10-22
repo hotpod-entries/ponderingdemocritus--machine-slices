@@ -1,63 +1,58 @@
-// One frame, back to front: ground, deep gears, working gears, vessels, couplings, pulses, tips, heart,
-// veil. The canvas state is saved and restored around the frame, and everything is drawn in world
-// units under a single viewport transform.
+// One frame, back to front: ground, the heart's light, deep gears, working gears, vessels, couplings,
+// organs, pulses, tips, heart. Everything is drawn in world units under one viewport transform,
+// and the canvas state is saved and restored around the frame.
+//
+// What never moves is kept between frames: the ground and the vessels as bitmap layers of the canvas's
+// size (copied in at whole pixels, so they are exactly what drawing them would give), the heart's
+// casting and the gears' shapes and sprites per scale.
 
 import type { Clock } from "../engine/rhythm.js";
 import type { Viewport } from "../engine/validate.js";
 import type { World } from "../world/world.js";
-import { drawCouplings, drawGears, type GearShapes } from "./gears.js";
-import { buildGroundArt, drawGround, drawVeil } from "./ground.js";
+import { drawCouplings, drawGears, newGearCache, type GearCache, type MakeCanvas } from "./gears.js";
+import { buildGroundArt, drawGround, drawHeartLight, drawVeil } from "./ground.js";
 import { buildHeartArt, drawHeart, type HeartArt } from "./heart.js";
+import { drawOrgans } from "./organs.js";
 import { MAX_EDGE_PX } from "./shapes.js";
-import { buildVesselArt, drawPulses, drawTips, drawVessels, type VesselArt } from "./vessels.js";
+import { buildVesselArt, drawPulses, drawTips, drawVessels } from "./vessels.js";
 import { viewOf, type View } from "./view.js";
 
-/** The shapes that never move, for one view at one scale. */
-interface StillArt {
+/** The still layers for one viewport on one canvas size. */
+interface Layers {
   key: string;
-  marks: Path2D;
-  vessels: VesselArt;
+  ground: HTMLCanvasElement;
+  vessels: HTMLCanvasElement;
 }
 
-/** What a world keeps between frames: still art for the last few views, shapes per scale. */
+/** What a world keeps between frames. */
 interface Cache {
-  stills: StillArt[];
-  gears: Map<number, GearShapes>;
+  layers: Layers[];
+  gears: Map<number, GearCache>;
   hearts: Map<number, HeartArt>;
 }
 
 const caches = new WeakMap<World, Cache>();
-const KEEP_STILLS = 3;
+/** How many viewports and scales a world remembers. */
+const KEEP = 3;
 
 function cacheFor(world: World): Cache {
   let cache = caches.get(world);
-  if (!cache) caches.set(world, (cache = { stills: [], gears: new Map(), hearts: new Map() }));
+  if (!cache) caches.set(world, (cache = { layers: [], gears: new Map(), hearts: new Map() }));
   return cache;
 }
 
-function stillArt(world: World, cache: Cache, view: View, step: number): StillArt {
-  const key = `${step}|${view.x0}|${view.y0}|${view.x1}|${view.y1}`;
-  let art = cache.stills.find((a) => a.key === key);
-  if (!art) {
-    art = { key, marks: buildGroundArt(world, view, step), vessels: buildVesselArt(world, view, step) };
-    cache.stills.unshift(art);
-    cache.stills.length = Math.min(cache.stills.length, KEEP_STILLS);
-  }
-  return art;
-}
-
-function perScale<T>(map: Map<number, T>, step: number, make: () => T): T {
-  let value = map.get(step);
+function perScale<T>(map: Map<number, T>, key: number, make: () => T): T {
+  let value = map.get(key);
   if (value === undefined) {
-    if (map.size >= KEEP_STILLS) map.delete(map.keys().next().value!);
-    map.set(step, (value = make()));
+    if (map.size >= KEEP) map.delete(map.keys().next().value!);
+    map.set(key, (value = make()));
   }
   return value;
 }
 
-/** Puts every piece of state a frame relies on back to the Canvas 2D defaults. */
-function resetState(ctx: CanvasRenderingContext2D): void {
-  ctx.setTransform(1, 0, 0, 1, 0, 0);
+/** Sets a context to the Canvas 2D defaults a frame relies on, under transform (sx, sy, dx, dy). */
+function begin(ctx: CanvasRenderingContext2D, sx: number, sy: number, dx: number, dy: number): void {
+  ctx.setTransform(sx, 0, 0, sy, dx, dy);
   ctx.globalAlpha = 1;
   ctx.globalCompositeOperation = "source-over";
   ctx.filter = "none";
@@ -68,30 +63,86 @@ function resetState(ctx: CanvasRenderingContext2D): void {
   ctx.imageSmoothingEnabled = true;
 }
 
-export function drawFrame(ctx: CanvasRenderingContext2D, world: World, clock: Clock, viewport: Viewport, width: number, height: number): void {
-  const view = viewOf(viewport, width, height);
+interface Frame {
+  world: World;
+  viewport: Viewport;
+  width: number;
+  height: number;
+  sx: number;
+  sy: number;
+  view: View;
+  step: number;
+  make: MakeCanvas;
+}
+
+/** The ground (opaque) and the vessels (on transparency), rendered once for this viewport and size. */
+function layersFor(f: Frame, cache: Cache): Layers {
+  const key = `${f.width}x${f.height}|${f.viewport.x},${f.viewport.y},${f.viewport.width},${f.viewport.height}`;
+  let layers = cache.layers.find((l) => l.key === key);
+  if (layers) return layers;
+  const layer = (paint: (ctx: CanvasRenderingContext2D) => void) => {
+    const canvas = f.make(f.width, f.height);
+    const ctx = canvas.getContext("2d", { willReadFrequently: true })!;
+    begin(ctx, f.sx, f.sy, -f.viewport.x * f.sx, -f.viewport.y * f.sy);
+    paint(ctx);
+    return canvas;
+  };
+  layers = {
+    key,
+    ground: layer((ctx) => {
+      ctx.save();
+      ctx.setTransform(1, 0, 0, 1, 0, 0);
+      ctx.fillStyle = f.world.palette.ground[2];
+      ctx.fillRect(0, 0, f.width, f.height);
+      ctx.restore();
+      drawGround(ctx, f.world, buildGroundArt(f.world, f.view, f.step), f.view);
+      drawVeil(ctx, f.world, f.view);
+    }),
+    vessels: layer((ctx) => {
+      drawVessels(ctx, f.world, buildVesselArt(f.world, f.view, f.step), f.view);
+      drawVeil(ctx, f.world, f.view, "source-atop");
+    }),
+  };
+  cache.layers.unshift(layers);
+  cache.layers.length = Math.min(cache.layers.length, KEEP);
+  return layers;
+}
+
+export function drawFrame(
+  ctx: CanvasRenderingContext2D,
+  world: World,
+  clock: Clock,
+  viewport: Viewport,
+  width: number,
+  height: number,
+  make: MakeCanvas,
+): void {
   const sx = width / viewport.width, sy = height / viewport.height;
+  const scale = Math.max(sx, sy);
   // The longest edge any path may have, in world units (see shapes.ts).
-  const step = MAX_EDGE_PX / Math.max(sx, sy);
+  const step = MAX_EDGE_PX / scale;
+  const f: Frame = { world, viewport, width, height, sx, sy, view: viewOf(viewport, width, height), step, make };
   const cache = cacheFor(world);
-  const still = stillArt(world, cache, view, step);
-  const gearShapes = perScale(cache.gears, step, () => new Map());
+  const layers = layersFor(f, cache);
+  const gears = perScale(cache.gears, step, newGearCache);
   const heart = perScale(cache.hearts, step, () => buildHeartArt(world, step));
+  const { view } = f;
 
   ctx.save();
-  resetState(ctx);
-  // An opaque base under everything, in device pixels, so that no pixel can stay translucent.
-  ctx.fillStyle = world.palette.ground[2];
-  ctx.fillRect(0, 0, width, height);
+  begin(ctx, 1, 1, 0, 0);
+  ctx.drawImage(layers.ground, 0, 0);
   ctx.setTransform(sx, 0, 0, sy, -viewport.x * sx, -viewport.y * sy);
-  drawGround(ctx, world, still.marks, clock, view);
-  drawGears(ctx, world, gearShapes, clock, view, step, "deep");
-  drawGears(ctx, world, gearShapes, clock, view, step, "working");
-  drawVessels(ctx, world, still.vessels, view);
+  drawHeartLight(ctx, world, clock, view);
+  drawGears(ctx, world, gears, clock, view, step, scale, make, "deep");
+  drawGears(ctx, world, gears, clock, view, step, scale, make, "working");
+  ctx.save();
+  ctx.setTransform(1, 0, 0, 1, 0, 0);
+  ctx.drawImage(layers.vessels, 0, 0);
+  ctx.restore();
   drawCouplings(ctx, world, clock, view, step);
+  drawOrgans(ctx, world, clock, view, step);
   drawPulses(ctx, world, clock, view, step);
   drawTips(ctx, world, clock, view, step);
   drawHeart(ctx, world, heart, clock, view, step);
-  drawVeil(ctx, world, view);
   ctx.restore();
 }

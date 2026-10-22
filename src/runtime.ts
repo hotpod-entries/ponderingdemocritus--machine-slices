@@ -44,5 +44,12 @@ export function renderFrame(canvas: HTMLCanvasElement, options: FrameOptions): v
   // A CPU-backed context: canvases of every size rasterize the same way, so slices match the whole.
   const ctx = canvas.getContext("2d", { willReadFrequently: true });
   if (!ctx) throw new Error("canvas has no 2D context (it may already hold another kind of context)");
-  drawFrame(ctx, worldFor(seedHex), clockAt(timeMs), viewport, canvas.width, canvas.height);
+  const doc = canvas.ownerDocument;
+  const make = (width: number, height: number) => {
+    const layer = doc.createElement("canvas");
+    layer.width = width;
+    layer.height = height;
+    return layer;
+  };
+  drawFrame(ctx, worldFor(seedHex), clockAt(timeMs), viewport, canvas.width, canvas.height, make);
 }

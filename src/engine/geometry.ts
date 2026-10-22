@@ -1,4 +1,4 @@
-// Plain geometry in world units: boxes, distances, and a uniform grid for neighbour queries.
+// Plain geometry in world units: boxes, and two spatial indexes for "what is near this point".
 
 export const TAU = Math.PI * 2;
 
@@ -7,12 +7,6 @@ export interface Box {
   y0: number;
   x1: number;
   y1: number;
-}
-
-export const boxAround = (x: number, y: number, r: number): Box => ({ x0: x - r, y0: y - r, x1: x + r, y1: y + r });
-
-export function boxesOverlap(a: Box, b: Box): boolean {
-  return a.x0 <= b.x1 && a.x1 >= b.x0 && a.y0 <= b.y1 && a.y1 >= b.y0;
 }
 
 /** The smallest box around a list of points, grown by `pad`. */
@@ -29,15 +23,6 @@ export function boxOfPoints(xs: ArrayLike<number>, ys: ArrayLike<number>, pad: n
 }
 
 export const lerp = (a: number, b: number, t: number): number => a + (b - a) * t;
-
-/** Distance from point (px, py) to the segment (ax, ay)–(bx, by). */
-export function segmentDistance(px: number, py: number, ax: number, ay: number, bx: number, by: number): number {
-  const dx = bx - ax, dy = by - ay;
-  const len2 = dx * dx + dy * dy;
-  let t = len2 > 0 ? ((px - ax) * dx + (py - ay) * dy) / len2 : 0;
-  t = t < 0 ? 0 : t > 1 ? 1 : t;
-  return Math.hypot(px - (ax + t * dx), py - (ay + t * dy));
-}
 
 /** Points in a square [0, size)², bucketed in a flat grid, for nearest-neighbour searches. */
 export class PointIndex {

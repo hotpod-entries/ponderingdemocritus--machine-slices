@@ -11,6 +11,7 @@ import { TAU } from "../engine/geometry.js";
 import type { Rng } from "../engine/random.js";
 import { BEAT_MS, BEATS_PER_CYCLE } from "../engine/rhythm.js";
 import type { Heart } from "./heart.js";
+import type { Organ } from "./organs.js";
 import type { Junction, VesselField, Vessels } from "./vessels.js";
 
 export type GearStyle = "spokes" | "holes" | "solid";
@@ -96,6 +97,8 @@ function makeGear(rng: Rng, counts: Map<number, number[]>, x: number, y: number,
 interface Placement {
   gears: Gear[];
   heart: Heart;
+  /** Organs to keep clear of. */
+  organs: readonly Organ[];
   /** Extra space kept between gears of different trains. */
   gap: number;
 }
@@ -104,6 +107,7 @@ interface Placement {
 function isClear(p: Placement, x: number, y: number, outer: number, except: Gear | null): boolean {
   if (x < 0 || y < 0 || x > 2000 || y > 2000) return false;
   if (Math.hypot(x - p.heart.cx, y - p.heart.cy) < p.heart.radius + outer + 6) return false;
+  if (p.organs.some((o) => Math.hypot(x - o.x, y - o.y) < o.radius + outer + 8)) return false;
   for (const g of p.gears) {
     if (g === except) continue;
     if (Math.hypot(g.x - x, g.y - y) < g.outer + outer + p.gap) return false;
@@ -111,38 +115,58 @@ function isClear(p: Placement, x: number, y: number, outer: number, except: Gear
   return true;
 }
 
-/** Grows a train from its first gear by adding gears that mesh with one already in it. */
-function growTrain(
-  rng: Rng,
-  p: Placement,
-  counts: Map<number, number[]>,
-  train: Train,
-  module: number,
-  size: number,
-  radius: () => number,
-  allowed: (x: number, y: number, outer: number) => boolean,
-): void {
-  for (let attempt = 0; attempt < 60 && train.gears.length < size; attempt++) {
-    const recent = train.gears.length > 1 && rng.chance(0.6) ? train.gears[train.gears.length - 1]! : rng.pick(train.gears);
-    const parent = p.gears[recent]!;
-    const teeth = nearestTeeth(counts, (2 * radius()) / module);
-    const pitch = (teeth * module) / 2;
-    const alpha = rng.range(0, TAU);
+type Allowed = (x: number, y: number, outer: number) => boolean;
+
+/**
+ * Adds a gear of about `radius` meshing with `parent`, trying directions a golden angle apart, and
+ * returns it, or null if no direction is free.
+ */
+function attach(rng: Rng, p: Placement, counts: Map<number, number[]>, train: Train, parent: Gear, radius: number, allowed: Allowed): Gear | null {
+  const teeth = nearestTeeth(counts, (2 * radius) / parent.module);
+  const pitch = (teeth * parent.module) / 2;
+  const start = rng.range(0, TAU);
+  for (let k = 0; k < 14; k++) {
+    const alpha = start + k * 2.39996;
     const x = parent.x + (parent.pitch + pitch) * Math.cos(alpha);
     const y = parent.y + (parent.pitch + pitch) * Math.sin(alpha);
-    if (!isClear(p, x, y, pitch + module, parent) || !allowed(x, y, pitch + module)) continue;
-    const g = makeGear(rng, counts, x, y, teeth, module, parent.train);
+    if (!isClear(p, x, y, pitch + parent.module, parent) || !allowed(x, y, pitch + parent.module)) continue;
+    const g = makeGear(rng, counts, x, y, teeth, parent.module, parent.train);
     g.phase = meshPhase(parent, teeth, alpha);
     g.turn = -parent.turn;
     train.gears.push(p.gears.length);
     p.gears.push(g);
+    return g;
+  }
+  return null;
+}
+
+/**
+ * Grows a compact cluster around a train's first gear: a main wheel meshing with it, then satellites
+ * on whichever gear has room, larger gears taking more of them, none taking more than three.
+ */
+function growCluster(rng: Rng, p: Placement, counts: Map<number, number[]>, train: Train, main: number, satellites: () => number, count: number, allowed: Allowed): void {
+  const first = p.gears[train.gears[0]!]!;
+  const meshes = new Map<Gear, number>([[first, 0]]);
+  const wheel = attach(rng, p, counts, train, first, main, allowed);
+  if (wheel) {
+    meshes.set(first, 1);
+    meshes.set(wheel, 1);
+  }
+  for (let i = 0; i < count; i++) {
+    const open = [...meshes.keys()].filter((g) => meshes.get(g)! < 3);
+    if (!open.length) break;
+    const parent = open[rng.weighted(open.map((g) => g.pitch * g.pitch))]!;
+    const g = attach(rng, p, counts, train, parent, satellites(), allowed);
+    if (!g) continue;
+    meshes.set(parent, meshes.get(parent)! + 1);
+    meshes.set(g, 1);
   }
 }
 
-export function designGears(rng: Rng, heart: Heart, vessels: Vessels, field: VesselField, pulseSpeed: number): GearWorks {
+export function designGears(rng: Rng, heart: Heart, organs: readonly Organ[], vessels: Vessels, field: VesselField, pulseSpeed: number): GearWorks {
   const trains: Train[] = [];
-  const deep: Placement = { gears: [], heart, gap: 10 };
-  const working: Placement = { gears: [], heart, gap: 2.5 };
+  const deep: Placement = { gears: [], heart, organs: [], gap: 10 };
+  const working: Placement = { gears: [], heart, organs, gap: 7 };
 
   // Deep trains: large, slow, behind the vessels.
   for (let attempt = 0; attempt < 120 && trains.length < 16; attempt++) {
@@ -157,14 +181,14 @@ export function designGears(rng: Rng, heart: Heart, vessels: Vessels, field: Ves
     const train: Train = { layer: "deep", perBeat: 1, clicks: false, delay: 0, tone: 0, junction: null, gears: [deep.gears.length] };
     deep.gears.push(first);
     trains.push(train);
-    growTrain(rng, deep, DEEP_TEETH, train, module, rng.int(2, 4), () => rng.range(45, 150), () => true);
+    growCluster(rng, deep, DEEP_TEETH, train, rng.range(50, 140), () => rng.range(40, 110), rng.int(0, 2), () => true);
   }
 
   // Working trains: each driven from a vessel junction, growing into the free space around it.
   const firstWorking = trains.length;
   const junctions = rng.shuffle(vessels.junctions.filter((j) => j.width > 4.2 && j.width < 16));
   for (const j of junctions) {
-    if (trains.length - firstWorking >= 70) break;
+    if (trains.length - firstWorking >= 46) break;
     const module = rng.range(2.3, 3.6);
     const teeth = nearestTeeth(WORKING_TEETH, (2 * Math.min(30, Math.max(9, j.width * 0.9 + rng.range(5, 12)))) / module);
     const outer = (teeth * module) / 2 + module;
@@ -185,9 +209,8 @@ export function designGears(rng: Rng, heart: Heart, vessels: Vessels, field: Ves
     };
     working.gears.push(driver);
     trains.push(train);
-    const size = rng.int(2, 9);
-    const radius = () => [rng.range(8, 14), rng.range(14, 34), rng.range(34, 64)][rng.weighted([0.34, 0.46, 0.2])]!;
-    growTrain(rng, working, WORKING_TEETH, train, module, size, radius, (x, y, r) => field.clearance(x, y, r + 8) >= r + 3);
+    const satellite = () => (rng.chance(0.45) ? rng.range(8, 13) : rng.range(14, 30));
+    growCluster(rng, working, WORKING_TEETH, train, rng.range(24, 58), satellite, rng.int(1, 5), (x, y, r) => field.clearance(x, y, r + 8) >= r + 3);
   }
 
   // One list: deep gears first, then working gears; trains index into it.

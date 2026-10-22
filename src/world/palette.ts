@@ -58,26 +58,6 @@ const PALETTES: readonly Palette[] = [
     spark: [255, 230, 196],
   },
   {
-    name: "bone and vermilion",
-    ground: ["#2b2420", "#18120f", "#090606"],
-    grid: "rgba(240, 218, 196, 0.06)",
-    ink: "#070403",
-    shade: "rgba(0, 0, 0, 0.5)",
-    metals: [
-      { dark: "#6a5f53", base: "#b6a892", light: "#e1d5bf", shine: "#fbf4e6" },
-      { dark: "#3a3432", base: "#6f6662", light: "#a69c96", shine: "#dad2cc" },
-      { dark: "#6a4c1f", base: "#b7893d", light: "#e1bc75", shine: "#fbe7b8" },
-    ],
-    deep: { dark: "#1a1412", base: "#251d19", light: "#302620", shine: "#3b3028" },
-    vessel: { edge: "#0a0504", wall: "#5b2a23", lumen: "#170806", shine: "#ebb6a6", collar: "#8f5b4d" },
-    heart: {
-      body: { dark: "#5f554a", base: "#a99b86", light: "#d8cbb4", shine: "#f8f0e0" },
-      steel: { dark: "#38322f", base: "#6c635f", light: "#a39993", shine: "#ddd5cf" },
-    },
-    glow: [255, 74, 46],
-    spark: [255, 216, 172],
-  },
-  {
     name: "steel and cyan",
     ground: ["#1b2232", "#0e121c", "#05070c"],
     grid: "rgba(170, 196, 240, 0.07)",
@@ -96,6 +76,26 @@ const PALETTES: readonly Palette[] = [
     },
     glow: [88, 222, 255],
     spark: [226, 250, 255],
+  },
+  {
+    name: "bone and vermilion",
+    ground: ["#2b2420", "#18120f", "#090606"],
+    grid: "rgba(240, 218, 196, 0.06)",
+    ink: "#070403",
+    shade: "rgba(0, 0, 0, 0.5)",
+    metals: [
+      { dark: "#6a5f53", base: "#b6a892", light: "#e1d5bf", shine: "#fbf4e6" },
+      { dark: "#3a3432", base: "#6f6662", light: "#a69c96", shine: "#dad2cc" },
+      { dark: "#6a4c1f", base: "#b7893d", light: "#e1bc75", shine: "#fbe7b8" },
+    ],
+    deep: { dark: "#1a1412", base: "#251d19", light: "#302620", shine: "#3b3028" },
+    vessel: { edge: "#0a0504", wall: "#5b2a23", lumen: "#170806", shine: "#ebb6a6", collar: "#8f5b4d" },
+    heart: {
+      body: { dark: "#5f554a", base: "#a99b86", light: "#d8cbb4", shine: "#f8f0e0" },
+      steel: { dark: "#38322f", base: "#6c635f", light: "#a39993", shine: "#ddd5cf" },
+    },
+    glow: [255, 74, 46],
+    spark: [255, 216, 172],
   },
   {
     name: "ink and gold",
@@ -119,8 +119,17 @@ const PALETTES: readonly Palette[] = [
   },
 ];
 
+/** A seed's palette: one of the curated four. */
 export function choosePalette(rng: Rng): Palette {
   return rng.pick(PALETTES);
 }
 
 export const rgba = (c: Rgb, alpha: number): string => `rgba(${c[0]}, ${c[1]}, ${c[2]}, ${alpha})`;
+
+/** The colour a fraction t of the way from `#rrggbb` a to b, as `#rrggbb`. */
+export function mix(a: string, b: string, t: number): string {
+  const channel = (hex: string, i: number) => parseInt(hex.slice(1 + 2 * i, 3 + 2 * i), 16);
+  let out = "#";
+  for (let i = 0; i < 3; i++) out += Math.round(channel(a, i) + (channel(b, i) - channel(a, i)) * t).toString(16).padStart(2, "0");
+  return out;
+}

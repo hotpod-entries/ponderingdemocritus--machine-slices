@@ -5,8 +5,8 @@ import { BEAT_MS, CYCLE_MS, renderFrame, WORLD_SIZE } from "./runtime.js";
 
 const DEFAULT_SEED = "0x" + "11".repeat(32);
 const WHOLE = { x: 0, y: 0, width: WORLD_SIZE, height: WORLD_SIZE };
-/** Largest backing store edge, in device pixels. */
-const MAX_PIXELS = 2048;
+/** Largest backing store edge, in device pixels: sharp on most screens, still smooth to play. */
+const MAX_PIXELS = 1440;
 
 function byId<T extends HTMLElement>(id: string): T {
   const el = document.getElementById(id);

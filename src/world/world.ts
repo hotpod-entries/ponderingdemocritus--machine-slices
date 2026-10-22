@@ -6,6 +6,7 @@ import { WORLD_SIZE } from "../engine/validate.js";
 import { seedWords, stream } from "../engine/random.js";
 import { designGears, type GearWorks } from "./gears.js";
 import { designHeart, type Heart } from "./heart.js";
+import { connectOrgans, placeOrgans, type Organ } from "./organs.js";
 import { choosePalette, type Palette } from "./palette.js";
 import { growVessels, VesselField, type Vessels } from "./vessels.js";
 
@@ -18,6 +19,7 @@ export interface World {
   seedHex: string;
   palette: Palette;
   heart: Heart;
+  organs: Organ[];
   vessels: Vessels;
   works: GearWorks;
 }
@@ -27,7 +29,9 @@ export function buildWorld(seedHex: string): World {
   const centre = WORLD_SIZE / 2;
   const palette = choosePalette(stream(words, "palette"));
   const heart = designHeart(stream(words, "heart"), centre, centre);
-  const vessels = growVessels(stream(words, "vessels"), heart);
-  const works = designGears(stream(words, "gears"), heart, vessels, new VesselField(vessels, 3.2), PULSE_SPEED);
-  return { seedHex, palette, heart, vessels, works };
+  const organs = placeOrgans(stream(words, "organs"), heart);
+  const vessels = growVessels(stream(words, "vessels"), heart, organs);
+  connectOrgans(organs, vessels, heart, PULSE_SPEED);
+  const works = designGears(stream(words, "gears"), heart, organs, vessels, new VesselField(vessels, 6), PULSE_SPEED);
+  return { seedHex, palette, heart, organs, vessels, works };
 }

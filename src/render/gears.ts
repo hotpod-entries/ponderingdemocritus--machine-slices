@@ -1,12 +1,14 @@
 // Gears. Each gear's outline (teeth, rim, spokes or holes) is built once per scale in its own
-// coordinates; every frame places it at its angle with Path2D.addPath, and each pass (shadow, dark rim,
-// lit rim, body, details) is one fill for all gears of one tone.
+// coordinates and rasterized into sprites (its shadow, dark and lit edges, and body); every frame
+// stamps the sprites turned to the gear's angle. A gear too large for a sprite at this scale is drawn
+// from its paths.
 
 import { TAU } from "../engine/geometry.js";
 import { teethAdvanced, type Clock } from "../engine/rhythm.js";
 import type { Gear, Train } from "../world/gears.js";
 import type { Metal } from "../world/palette.js";
 import type { World } from "../world/world.js";
+import { heartLit, heartLitAt } from "./ground.js";
 import { circle, hole, Pen, placed, polygon, ring, worldPath } from "./shapes.js";
 import { pixels, seesDisc, type View } from "./view.js";
 
@@ -87,60 +89,158 @@ export function gearAngle(g: Gear, train: Train, clock: Clock): number {
   return g.phase + g.turn * (TAU / g.teeth) * teethAdvanced(clock, train.perBeat, train.clicks, train.delay);
 }
 
-const passes = () => ({ dark: worldPath(), light: worldPath(), body: worldPath(), detail: worldPath(), shine: worldPath() });
+/** A gear rasterized once per scale: its silhouette in shadow (and in dark and light), and its body. */
+interface GearSprites {
+  shadow: HTMLCanvasElement;
+  dark: HTMLCanvasElement | null;
+  light: HTMLCanvasElement | null;
+  body: HTMLCanvasElement;
+}
 
+/** Gear shapes and sprites of one world at one scale, built as gears come into view. */
+export interface GearCache {
+  shapes: GearShapes;
+  sprites: Map<Gear, GearSprites | null>;
+}
+
+export const newGearCache = (): GearCache => ({ shapes: new Map(), sprites: new Map() });
+
+/** Gears whose sprite would be wider than this many pixels are drawn as paths instead. */
+const MAX_SPRITE_PX = 640;
+
+export type MakeCanvas = (width: number, height: number) => HTMLCanvasElement;
+
+function sprite(make: MakeCanvas, g: Gear, scale: number, paint: (ctx: CanvasRenderingContext2D) => void): HTMLCanvasElement {
+  const size = Math.ceil(2 * (g.outer + 2) * scale) + 4;
+  const canvas = make(size, size);
+  const ctx = canvas.getContext("2d", { willReadFrequently: true })!;
+  ctx.setTransform(scale, 0, 0, scale, size / 2, size / 2);
+  paint(ctx);
+  return canvas;
+}
+
+function gearSprites(make: MakeCanvas, world: World, g: Gear, shape: GearShape, metal: Metal, deep: boolean, scale: number): GearSprites | null {
+  if (2 * (g.outer + 2) * scale > MAX_SPRITE_PX) return null;
+  const { palette } = world;
+  const silhouette = (color: string, alpha: number) =>
+    sprite(make, g, scale, (ctx) => {
+      ctx.globalAlpha = alpha;
+      ctx.fillStyle = color;
+      ctx.fill(shape.body);
+    });
+  const tone = heartLitAt(world, g.x, g.y, metal.light, metal.base, metal.dark);
+  return {
+    shadow: silhouette(palette.shade, deep ? 0.6 : 1),
+    dark: deep ? null : silhouette(metal.dark, 1),
+    light: deep ? null : silhouette(metal.light, 1),
+    body: sprite(make, g, scale, (ctx) => {
+      ctx.fillStyle = tone;
+      ctx.fill(shape.body);
+      ctx.fillStyle = metal.dark;
+      ctx.fill(shape.detail);
+      ctx.globalAlpha = 0.5;
+      ctx.fillStyle = metal.shine;
+      ctx.fill(shape.shine);
+    }),
+  };
+}
+
+interface Visible {
+  g: Gear;
+  angle: number;
+  metal: Metal;
+  shape: GearShape;
+  sprites: GearSprites | null;
+}
+
+/**
+ * Draws one layer of gears in passes over all of them: shadows, dark edges, lit edges, bodies. A gear
+ * comes from its sprites, turned to its angle, or (when too large for a sprite) from its paths.
+ */
 export function drawGears(
   ctx: CanvasRenderingContext2D,
   world: World,
-  shapes: GearShapes,
+  cache: GearCache,
   clock: Clock,
   view: View,
   step: number,
+  scale: number,
+  make: MakeCanvas,
   layer: Train["layer"],
 ): void {
   const { works, palette } = world;
   const deep = layer === "deep";
-  const metals: readonly Metal[] = deep ? [palette.deep] : palette.metals;
-  const shadow = worldPath();
-  const byTone = metals.map(passes);
   const rim = Math.min(2.2, pixels(view, 0.9, 0.35));
   const drop = deep ? pixels(view, 5, 7) : pixels(view, 2.6, 2.8);
+  const visible: Visible[] = [];
   for (const train of works.trains) {
     if (train.layer !== layer) continue;
-    const tone = byTone[deep ? 0 : train.tone]!;
+    const metal = deep ? palette.deep : palette.metals[train.tone]!;
     for (const index of train.gears) {
       const g = works.gears[index]!;
       if (!seesDisc(view, g.x + drop / 2, g.y + drop / 2, g.outer + drop)) continue;
-      let shape = shapes.get(g);
-      if (!shape) shapes.set(g, (shape = gearShape(g, step)));
-      const angle = gearAngle(g, train, clock);
-      shadow.addPath(shape.body, placed(g.x + drop * 0.8, g.y + drop, angle));
-      tone.dark.addPath(shape.body, placed(g.x + rim, g.y + rim, angle));
-      tone.light.addPath(shape.body, placed(g.x - rim, g.y - rim, angle));
-      tone.body.addPath(shape.body, placed(g.x, g.y, angle));
-      tone.detail.addPath(shape.detail, placed(g.x, g.y, angle));
-      tone.shine.addPath(shape.shine, placed(g.x, g.y, angle));
+      let shape = cache.shapes.get(g);
+      if (!shape) cache.shapes.set(g, (shape = gearShape(g, step)));
+      let sprites = cache.sprites.get(g);
+      if (sprites === undefined) cache.sprites.set(g, (sprites = gearSprites(make, world, g, shape, metal, deep, scale)));
+      visible.push({ g, angle: gearAngle(g, train, clock), metal, shape, sprites });
     }
   }
-  ctx.fillStyle = palette.shade;
-  ctx.globalAlpha = deep ? 0.6 : 1;
-  ctx.fill(shadow);
-  ctx.globalAlpha = 1;
-  byTone.forEach((p, i) => {
-    const metal = metals[i]!;
-    ctx.fillStyle = metal.dark;
-    ctx.fill(p.dark);
-    ctx.fillStyle = metal.light;
-    ctx.fill(p.light);
-    ctx.fillStyle = metal.base;
-    ctx.fill(p.body);
-    ctx.fillStyle = metal.dark;
-    ctx.fill(p.detail);
-    ctx.globalAlpha = 0.5;
-    ctx.fillStyle = metal.shine;
-    ctx.fill(p.shine);
-    ctx.globalAlpha = 1;
-  });
+
+  const base = ctx.getTransform();
+  /** Draws a sprite centred on (x, y), turned by `angle`. */
+  const stamp = (image: HTMLCanvasElement, x: number, y: number, angle: number) => {
+    const c = Math.cos(angle) / scale, s = Math.sin(angle) / scale;
+    ctx.setTransform(
+      base.a * c + base.c * s,
+      base.b * c + base.d * s,
+      -base.a * s + base.c * c,
+      -base.b * s + base.d * c,
+      base.a * x + base.c * y + base.e,
+      base.b * x + base.d * y + base.f,
+    );
+    ctx.drawImage(image, -image.width / 2, -image.height / 2);
+  };
+  // Pass by pass across all gears, so that no gear's edge falls on a neighbour's body. Gears without
+  // sprites go into one path per tone and pass.
+  for (const pass of ["shadow", "dark", "light", "body"] as const) {
+    if (deep && (pass === "dark" || pass === "light")) continue;
+    const dx = pass === "shadow" ? drop * 0.8 : pass === "dark" ? rim : pass === "light" ? -rim : 0;
+    const dy = pass === "shadow" ? drop : dx;
+    const batches = new Map<Metal, { body: Path2D; detail: Path2D; shine: Path2D }>();
+    for (const v of visible) {
+      const x = v.g.x + dx, y = v.g.y + dy;
+      if (v.sprites) {
+        stamp(v.sprites[pass]!, x, y, v.angle);
+        continue;
+      }
+      let batch = batches.get(v.metal);
+      if (!batch) batches.set(v.metal, (batch = { body: worldPath(), detail: worldPath(), shine: worldPath() }));
+      batch.body.addPath(v.shape.body, placed(x, y, v.angle));
+      if (pass === "body") {
+        batch.detail.addPath(v.shape.detail, placed(x, y, v.angle));
+        batch.shine.addPath(v.shape.shine, placed(x, y, v.angle));
+      }
+    }
+    ctx.setTransform(base);
+    for (const [metal, batch] of batches) {
+      if (pass === "shadow") {
+        ctx.globalAlpha = deep ? 0.6 : 1;
+        ctx.fillStyle = palette.shade;
+      } else {
+        ctx.fillStyle = pass === "dark" ? metal.dark : pass === "light" ? metal.light : heartLit(ctx, world, metal.light, metal.base, metal.dark);
+      }
+      ctx.fill(batch.body);
+      ctx.globalAlpha = 1;
+      if (pass !== "body") continue;
+      ctx.fillStyle = metal.dark;
+      ctx.fill(batch.detail);
+      ctx.globalAlpha = 0.5;
+      ctx.fillStyle = metal.shine;
+      ctx.fill(batch.shine);
+      ctx.globalAlpha = 1;
+    }
+  }
 }
 
 /** The hub where a working train meets its vessel: a capped coupling that turns with the driver. */
