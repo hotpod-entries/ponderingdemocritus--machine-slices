@@ -129,38 +129,61 @@ function stretch(c: Chain, d0: number, d1: number): { xs: number[]; ys: number[]
   return xs.length >= 2 ? { xs, ys, ws } : null;
 }
 
+/** A pulse is a bright head PULSE_LENGTH long drawn in SEGMENTS steps, then a dim wake WAKE long. */
 const SEGMENTS = 6;
+const WAKE = 280;
+const WAKE_SEGMENTS = 3;
 
-/** The glow of the pulses: a wide halo, a body and a hot core. */
+/**
+ * The glow of the pulses: a soft bloom around the head, a halo, a body and a hot core; behind the
+ * head, a wake of fading light shows which way the pulse is going.
+ */
 export function drawPulses(ctx: CanvasRenderingContext2D, world: World, clock: Clock, view: View, step: number): void {
   const { heart, vessels, palette } = world;
   const haloReach = pixels(view, 2.6, 3.2);
+  const glow = rgba(palette.glow, 1);
   const layers = [
-    { half: (w: number) => w * 0.5 + haloReach + w * 0.18, alpha: 0.2, color: rgba(palette.glow, 1), glow: new Glow(step) },
-    { half: (w: number) => w * 0.32 + 0.5, alpha: 0.55, color: rgba(palette.glow, 1), glow: new Glow(step) },
+    { half: (w: number) => w * 1.1 + 4 * haloReach, alpha: 0.07, color: glow, glow: new Glow(step) },
+    { half: (w: number) => w * 0.68 + haloReach, alpha: 0.2, color: glow, glow: new Glow(step) },
+    { half: (w: number) => w * 0.32 + 0.5, alpha: 0.55, color: glow, glow: new Glow(step) },
     { half: (w: number) => w * 0.13 + 0.25, alpha: 0.85, color: rgba(palette.spark, 1), glow: new Glow(step) },
   ];
+  const wake = { half: (w: number) => w * 0.3 + 0.4, alpha: 0.3, color: glow, glow: new Glow(step) };
+  // Stretches behind the front: the head's six in every layer but the bloom, which only the first
+  // three get, then the wake.
+  const stretches: { from: number; to: number; level: number; layers: typeof layers }[] = [];
+  for (let k = 0; k < SEGMENTS; k++) {
+    const level = (1 - (k + 0.5) / SEGMENTS) ** 1.6;
+    stretches.push({ from: (k / SEGMENTS) * PULSE_LENGTH, to: ((k + 1) / SEGMENTS) * PULSE_LENGTH, level, layers: k < 3 ? layers : layers.slice(1) });
+  }
+  for (let k = 0; k < WAKE_SEGMENTS; k++) {
+    const level = 0.55 * (1 - (k + 0.5) / WAKE_SEGMENTS);
+    stretches.push({ from: PULSE_LENGTH + (k / WAKE_SEGMENTS) * WAKE, to: PULSE_LENGTH + ((k + 1) / WAKE_SEGMENTS) * WAKE, level, layers: [wake] });
+  }
+  // The bloom reaches farthest beyond a chain's box.
+  const reach = 4 * haloReach + 0.7 * vessels.maxWidth;
   for (const c of vessels.chains) {
-    if (!sees(view, c.box, haloReach + 4)) continue;
+    if (!sees(view, c.box, reach)) continue;
     const first = c.ds[0]!, last = c.ds[c.ds.length - 1]!;
-    const maxAge = (vessels.reach[c.tree]! + PULSE_LENGTH) / PULSE_SPEED;
+    const maxAge = (vessels.reach[c.tree]! + PULSE_LENGTH + WAKE) / PULSE_SPEED;
     for (const age of pulseAges(clock, heart.firePhase[c.tree]!, maxAge)) {
       const front = age * PULSE_SPEED;
-      if (first > front || last < front - PULSE_LENGTH) continue;
+      if (first > front || last < front - PULSE_LENGTH - WAKE) continue;
       const fade = 0.35 + 0.65 * Math.exp(-front / 1250);
-      for (let k = 0; k < SEGMENTS; k++) {
-        const level = Math.round(LEVELS * fade * (1 - (k + 0.5) / SEGMENTS) ** 1.6);
+      for (const st of stretches) {
+        const level = Math.round(LEVELS * fade * st.level);
         if (level <= 0) continue;
-        const piece = stretch(c, Math.max(first, front - ((k + 1) / SEGMENTS) * PULSE_LENGTH), Math.min(last, front - (k / SEGMENTS) * PULSE_LENGTH));
+        const piece = stretch(c, Math.max(first, front - st.to), Math.min(last, front - st.from));
         if (!piece) continue;
         const { nx, ny } = normals(piece.xs, piece.ys);
-        for (const layer of layers) {
+        for (const layer of st.layers) {
           const half = piece.ws.map(layer.half);
           band(layer.glow.at(level), piece.xs, piece.ys, nx, ny, half.map((h) => -h), half);
         }
       }
     }
   }
+  wake.glow.fill(ctx, glow, wake.alpha);
   for (const layer of layers) layer.glow.fill(ctx, layer.color, layer.alpha);
 }
 

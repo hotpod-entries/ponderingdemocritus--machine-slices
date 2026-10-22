@@ -22,16 +22,16 @@ The whole work is one body, 2000 × 2000 units, organised around a single heart.
 
 - **Heart.** A radial engine at the exact centre of the world, on the boundary between slices 499 and 500. Its crank turns once per beat in two strokes, lub then dub, carrying a master rod and articulated rods; each cylinder fires as its piston tops out. The crankcase is drawn as a cutaway, so the counterweight, rods, link plate and crankshaft nose turn in plain sight.
 - **Vessels.** One tree per cylinder, grown outward from the cylinder heads by space colonization: scattered attraction points pull the nearest vessel tips toward them, and the trees compete for the same points, so they share the body out like arteries. Widths follow Murray's law. Every point knows its distance from the heart along the network.
-- **Pulses.** Every beat each cylinder sends a pulse of light down its tree. A pulse is wherever the network is at its distance from the heart, so one firing spreads through every branch at once and reaches the far tips two to three seconds later; each tip flashes as it arrives.
+- **Pulses.** Every beat each cylinder sends a pulse of light down its tree. A pulse is wherever the network is at its distance from the heart, so one firing spreads through every branch at once and reaches the far tips two to three seconds later, a fading wake behind it; each tip flashes as it arrives.
 - **Gear trains.** Each working train is driven from a vessel junction (the coupling over the junction turns with it) and clicks forward one tooth when the pulse reaches that junction, so a wave of clicks runs outward with every heartbeat. Gears mesh exactly: centres a sum of pitch radii apart, each phase putting a tooth into a gap. Large, dim gears turn slowly in the deep layer behind.
-- **Organs.** Three to five larger mechanisms sit around the heart and the vessels grow to them: irises that open and close with the breath and flash when their pulse arrives, and escapements whose anchor and pendulum rock once every two beats while the escape wheel clicks.
+- **Organs.** Three to five larger mechanisms sit around the heart and the vessels grow to them: irises that open and close with the breath and flash when their pulse arrives, lungs whose two pleated bellows fill and empty with the breath, and escapements whose anchor and pendulum rock once every two beats while the escape wheel clicks.
 
 Every rhythm divides one 60-second cycle, so the machine at t and at t + 60 000 ms is the same picture and playback loops without a seam:
 
 | Rhythm | Period | Per cycle | Drives |
 | --- | --- | --- | --- |
 | cycle | 60 000 ms | 1 | the whole machine repeats |
-| breath | 5 000 ms | 12 | the heart's light, the irises |
+| breath | 5 000 ms | 12 | the heart's light, the irises, the lungs |
 | heartbeat | 833⅓ ms | 72 | crank, pistons, pulses, gear clicks, escapements |
 
 The seed chooses everything else: the number of cylinders (5, 7 or 9) and the engine's proportions, the vessel trees, the organs, the gear trains, and one of four palettes (bone and vermilion, verdigris and ember, steel and cyan, ink and gold).

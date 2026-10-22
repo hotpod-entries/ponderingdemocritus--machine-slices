@@ -1,6 +1,6 @@
 // Organs: a few large mechanisms set in the body around the heart before the vessels grow. Vessels
 // grow toward their rims, so every organ is fed by a vessel; it acts when the heartbeat's pulse
-// arrives there (escapement) or with the breath (iris).
+// arrives there (escapement) or with the breath (iris, lung).
 
 import { TAU } from "../engine/geometry.js";
 import type { Rng } from "../engine/random.js";
@@ -8,7 +8,7 @@ import { BEAT_MS } from "../engine/rhythm.js";
 import type { Heart } from "./heart.js";
 import type { Vessels } from "./vessels.js";
 
-export type OrganKind = "iris" | "escapement";
+export type OrganKind = "iris" | "escapement" | "lung";
 
 export interface Organ {
   kind: OrganKind;
@@ -16,9 +16,9 @@ export interface Organ {
   y: number;
   /** The organ keeps this disc clear of vessels and gears. */
   radius: number;
-  /** Turn of the organ's housing, and where an iris's blades start. */
+  /** Turn of the organ: where an iris's blades start, which way a lung's bellows point. */
   angle: number;
-  /** Iris blades, or escape-wheel teeth. */
+  /** Iris blades, escape-wheel teeth, or pleats of each bellows. */
   count: number;
   /** Beats after the cycle's first beat at which the pulse reaches the organ. */
   delay: number;
@@ -29,11 +29,11 @@ export interface Organ {
 export function placeOrgans(rng: Rng, heart: Heart): Organ[] {
   const organs: Organ[] = [];
   const wanted = rng.int(3, 5);
-  const kinds: OrganKind[] = rng.chance(0.5) ? ["iris", "escapement"] : ["escapement", "iris"];
+  const kinds = rng.shuffle<OrganKind>(["iris", "escapement", "lung"]);
   // Spread around the heart like a constellation: one sector each, at a free distance within it.
   const turn = rng.range(0, TAU);
   for (let attempt = 0; attempt < 200 && organs.length < wanted; attempt++) {
-    const kind = kinds[organs.length % 2]!;
+    const kind = kinds[organs.length % kinds.length]!;
     const radius = kind === "iris" ? rng.range(64, 92) : rng.range(84, 108);
     const a = turn + ((organs.length + rng.range(-0.3, 0.3)) * TAU) / wanted;
     const d = rng.range(heart.radius + radius + 150, 880);
@@ -41,7 +41,7 @@ export function placeOrgans(rng: Rng, heart: Heart): Organ[] {
     if (x < radius + 40 || y < radius + 40 || x > 2000 - radius - 40 || y > 2000 - radius - 40) continue;
     if (organs.some((o) => Math.hypot(o.x - x, o.y - y) < o.radius + radius + 170)) continue;
     const angle = rng.range(0, TAU);
-    const count = kind === "iris" ? rng.pick([7, 9, 11, 12]) : rng.pick([15, 18, 20, 24]);
+    const count = kind === "iris" ? rng.pick([7, 9, 11, 12]) : kind === "escapement" ? rng.pick([15, 18, 20, 24]) : rng.int(5, 8);
     organs.push({ kind, x, y, radius, angle, count, delay: 0, inlet: null });
   }
   return organs;
