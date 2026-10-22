@@ -1,0 +1,184 @@
+// Vessels, pulses and tips. The vessels never move, so their passes (edge, wall, channel, highlight,
+// collars, tip bulbs) are built once per view and scale as unions. Pulses are light: each beat every
+// cylinder sends one down its tree, and wherever the network is at the pulse's distance from the
+// heart, that stretch glows; when the pulse reaches a tip, the tip flashes.
+
+import { lerp } from "../engine/geometry.js";
+import { BEAT_MS, pulseAges, wrap, type Clock } from "../engine/rhythm.js";
+import { rgba } from "../world/palette.js";
+import type { Chain } from "../world/vessels.js";
+import { PULSE_LENGTH, PULSE_SPEED, type World } from "../world/world.js";
+import { band, circle, fillShifted, Glow, LEVELS, LIGHT_X, LIGHT_Y, normals, Pen, tube } from "./shapes.js";
+import { pixels, sees, seesDisc, type View } from "./view.js";
+
+export interface VesselArt {
+  edge: Path2D;
+  wall: Path2D;
+  lumen: Path2D;
+  shine: Path2D;
+  collars: Path2D;
+  seams: Path2D;
+  lenses: Path2D;
+}
+
+const EDGE = 1.3;
+
+/** Radius of the bulb that ends a tip of vessel width w, and its centre. */
+const bulbRadius = (w: number) => Math.max(2.6, w * 1.15);
+function bulbAt(t: { x: number; y: number; angle: number; width: number }): [number, number, number] {
+  const r = bulbRadius(t.width);
+  return [t.x + Math.cos(t.angle) * r * 0.55, t.y + Math.sin(t.angle) * r * 0.55, r];
+}
+
+export function buildVesselArt(world: World, view: View, step: number): VesselArt {
+  const pen = () => new Pen(step);
+  const edge = pen(), wall = pen(), lumen = pen(), shine = pen(), collars = pen(), seams = pen(), lenses = pen();
+  for (const c of world.vessels.chains) {
+    if (!sees(view, c.box, EDGE + 6)) continue;
+    const n = c.xs.length;
+    const half = Array.from(c.ws, (w) => w / 2);
+    tube(edge, c.xs, c.ys, half.map((h) => h + EDGE));
+    tube(wall, c.xs, c.ys, half);
+    if (c.ws[n - 1]! > 2.6) tube(lumen, c.xs, c.ys, half.map((h) => h * 0.42));
+    // The highlight rides on the side of the tube that faces the light.
+    const { nx, ny } = normals(c.xs, c.ys);
+    const centre = half.map((h, i) => -(nx[i]! * LIGHT_X + ny[i]! * LIGHT_Y) * h * 0.52);
+    band(shine, c.xs, c.ys, nx, ny, centre.map((o, i) => o - half[i]! * 0.13), centre.map((o, i) => o + half[i]! * 0.13));
+    if (c.ws[n - 1]! >= 7) addCollars(collars, seams, c);
+  }
+  for (const t of world.vessels.tips) {
+    const [x, y, r] = bulbAt(t);
+    if (!seesDisc(view, x, y, r + EDGE)) continue;
+    circle(edge, x, y, r + EDGE);
+    circle(wall, x, y, r);
+    circle(lenses, x, y, r * 0.48);
+  }
+  return { edge: edge.path, wall: wall.path, lumen: lumen.path, shine: shine.path, collars: collars.path, seams: seams.path, lenses: lenses.path };
+}
+
+/** Collars around a wide vessel at regular steps, each with a dark seam on its far side. */
+function addCollars(collars: Pen, seams: Pen, c: Chain): void {
+  const n = c.xs.length;
+  const width = c.ws[n - 1]!;
+  const step = Math.max(16, width * 2.2);
+  const length = c.ds[n - 1]! - c.ds[0]!;
+  const thick = Math.max(1.1, width * 0.11);
+  let i = 0;
+  for (let s = step * 0.9; s < length - step * 0.6; s += step) {
+    const d = c.ds[0]! + s;
+    while (i < n - 2 && c.ds[i + 1]! < d) i++;
+    const t = (d - c.ds[i]!) / Math.max(1e-9, c.ds[i + 1]! - c.ds[i]!);
+    const x = lerp(c.xs[i]!, c.xs[i + 1]!, t), y = lerp(c.ys[i]!, c.ys[i + 1]!, t);
+    const len = Math.hypot(c.xs[i + 1]! - c.xs[i]!, c.ys[i + 1]! - c.ys[i]!) || 1;
+    const tx = (c.xs[i + 1]! - c.xs[i]!) / len, ty = (c.ys[i + 1]! - c.ys[i]!) / len;
+    const h = lerp(c.ws[i]!, c.ws[i + 1]!, t) / 2 + 1.5;
+    const across = (pen: Pen, a: number, b: number, reach: number) =>
+      band(pen, [x + tx * a, x + tx * b], [y + ty * a, y + ty * b], [-ty, -ty], [tx, tx], [-reach, -reach], [reach, reach]);
+    across(collars, -thick, thick, h);
+    across(seams, thick, thick + Math.max(0.6, width * 0.06), h - 0.6);
+  }
+}
+
+export function drawVessels(ctx: CanvasRenderingContext2D, world: World, art: VesselArt, view: View): void {
+  const { palette } = world;
+  const shadow = pixels(view, 3, 3.5);
+  ctx.fillStyle = palette.shade;
+  fillShifted(ctx, art.edge, shadow * 0.8, shadow);
+  ctx.fillStyle = palette.vessel.edge;
+  ctx.fill(art.edge);
+  ctx.fillStyle = palette.vessel.wall;
+  ctx.fill(art.wall);
+  ctx.fillStyle = palette.vessel.lumen;
+  ctx.fill(art.lumen);
+  ctx.fill(art.lenses);
+  ctx.globalAlpha = 0.55;
+  ctx.fillStyle = palette.vessel.shine;
+  ctx.fill(art.shine);
+  ctx.globalAlpha = 1;
+  ctx.fillStyle = palette.vessel.collar;
+  ctx.fill(art.collars);
+  ctx.fillStyle = palette.vessel.edge;
+  ctx.fill(art.seams);
+}
+
+/** The part of a chain between distances d0 and d1 from the heart, or null if it is empty. */
+function stretch(c: Chain, d0: number, d1: number): { xs: number[]; ys: number[]; ws: number[] } | null {
+  const ds = c.ds, n = ds.length;
+  if (d1 <= d0) return null;
+  const xs: number[] = [], ys: number[] = [], ws: number[] = [];
+  const at = (d: number, i: number) => {
+    const t = (d - ds[i]!) / Math.max(1e-9, ds[i + 1]! - ds[i]!);
+    xs.push(lerp(c.xs[i]!, c.xs[i + 1]!, t));
+    ys.push(lerp(c.ys[i]!, c.ys[i + 1]!, t));
+    ws.push(lerp(c.ws[i]!, c.ws[i + 1]!, t));
+  };
+  let i = 0, hi = n - 2;
+  while (i < hi) {
+    const mid = (i + hi + 1) >> 1;
+    if (ds[mid]! <= d0) i = mid;
+    else hi = mid - 1;
+  }
+  at(d0, i);
+  for (let k = i + 1; k < n && ds[k]! < d1; k++) {
+    xs.push(c.xs[k]!);
+    ys.push(c.ys[k]!);
+    ws.push(c.ws[k]!);
+    i = k;
+  }
+  at(d1, Math.min(i, n - 2));
+  return xs.length >= 2 ? { xs, ys, ws } : null;
+}
+
+const SEGMENTS = 6;
+
+/** The glow of the pulses: a wide halo, a body and a hot core. */
+export function drawPulses(ctx: CanvasRenderingContext2D, world: World, clock: Clock, view: View, step: number): void {
+  const { heart, vessels, palette } = world;
+  const haloReach = pixels(view, 2.6, 3.2);
+  const layers = [
+    { half: (w: number) => w * 0.5 + haloReach + w * 0.18, alpha: 0.2, color: rgba(palette.glow, 1), glow: new Glow(step) },
+    { half: (w: number) => w * 0.32 + 0.5, alpha: 0.55, color: rgba(palette.glow, 1), glow: new Glow(step) },
+    { half: (w: number) => w * 0.13 + 0.25, alpha: 0.85, color: rgba(palette.spark, 1), glow: new Glow(step) },
+  ];
+  for (const c of vessels.chains) {
+    if (!sees(view, c.box, haloReach + 4)) continue;
+    const first = c.ds[0]!, last = c.ds[c.ds.length - 1]!;
+    const maxAge = (vessels.reach[c.tree]! + PULSE_LENGTH) / PULSE_SPEED;
+    for (const age of pulseAges(clock, heart.firePhase[c.tree]!, maxAge)) {
+      const front = age * PULSE_SPEED;
+      if (first > front || last < front - PULSE_LENGTH) continue;
+      const fade = 0.35 + 0.65 * Math.exp(-front / 1250);
+      for (let k = 0; k < SEGMENTS; k++) {
+        const level = Math.round(LEVELS * fade * (1 - (k + 0.5) / SEGMENTS) ** 1.6);
+        if (level <= 0) continue;
+        const piece = stretch(c, Math.max(first, front - ((k + 1) / SEGMENTS) * PULSE_LENGTH), Math.min(last, front - (k / SEGMENTS) * PULSE_LENGTH));
+        if (!piece) continue;
+        const { nx, ny } = normals(piece.xs, piece.ys);
+        for (const layer of layers) {
+          const half = piece.ws.map(layer.half);
+          band(layer.glow.at(level), piece.xs, piece.ys, nx, ny, half.map((h) => -h), half);
+        }
+      }
+    }
+  }
+  for (const layer of layers) layer.glow.fill(ctx, layer.color, layer.alpha);
+}
+
+/** Each tip flashes as its pulse arrives, then fades before the next beat. */
+export function drawTips(ctx: CanvasRenderingContext2D, world: World, clock: Clock, view: View, step: number): void {
+  const { heart, vessels, palette } = world;
+  const halo = new Glow(step), core = new Glow(step);
+  for (const t of vessels.tips) {
+    const arrival = heart.firePhase[t.tree]! + t.distance / PULSE_SPEED / BEAT_MS;
+    const flash = Math.exp(-(wrap(clock.beats - arrival, 1) * BEAT_MS) / 260);
+    const level = Math.round(LEVELS * flash);
+    if (level <= 0) continue;
+    const [x, y, r] = bulbAt(t);
+    const reach = r * (1.5 + 1.6 * flash);
+    if (!seesDisc(view, x, y, reach)) continue;
+    circle(halo.at(level), x, y, reach);
+    circle(core.at(level), x, y, r * 0.62);
+  }
+  halo.fill(ctx, rgba(palette.glow, 1), 0.3);
+  core.fill(ctx, rgba(palette.spark, 1), 0.8);
+}
